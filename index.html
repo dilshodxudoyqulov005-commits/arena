@@ -369,7 +369,13 @@ function play(from,to){
   }else ckMove(from,to);
   S.last={fr:from.r,fc:from.c,tr:to.r,tc:to.c};
   hap('medium');
+  keepChainSel();
   afterMove(true);
+}
+function keepChainSel(){
+  if(S.game==='checkers'&&S.chain&&!S.over&&(S.mode==='pass'||S.turn===S.my)){
+    S.sel={r:S.chain.r,c:S.chain.c};S.moves=ckLegal(S.chain.r,S.chain.c);
+  }
 }
 
 function afterMove(mine){
@@ -406,14 +412,15 @@ function finish(winner,why){
 function ckSteps(r,c,capOnly){
   const p=S.B[r][c];if(!p)return[];
   const me=p.toLowerCase(),king=p===p.toUpperCase();
-  const dirs=king?[[-1,-1],[-1,1],[1,-1],[1,1]]:me==='w'?[[-1,-1],[-1,1]]:[[1,-1],[1,1]];
+  const dirs=[[-1,-1],[-1,1],[1,-1],[1,1]];
+  const fwd=me==='w'?-1:1;
   const out=[];
   for(const[dr,dc]of dirs){
     const r1=r+dr,c1=c+dc,r2=r+2*dr,c2=c+2*dc;
     if(!inb(r1,c1))continue;
     const mid=S.B[r1][c1];
     if(mid){if(mid.toLowerCase()!==me&&inb(r2,c2)&&!S.B[r2][c2])out.push({r:r2,c:c2,jump:{r:r1,c:c1}});}
-    else if(!capOnly)out.push({r:r1,c:c1});
+    else if(!capOnly&&(king||dr===fwd))out.push({r:r1,c:c1});
   }
   return out;
 }
@@ -487,6 +494,7 @@ function onRoom(me,d){
   }catch(e){console.error('Holatni yuklashda xato',e);return;}
   const lm=d.lastMove;S.last=lm&&typeof lm.fr==='number'?lm:null;
   S.sel=null;S.moves=[];
+  keepChainSel();
   checkOver();render();
 }
 
