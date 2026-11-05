@@ -26,10 +26,25 @@ body{user-select:none;-webkit-user-select:none;touch-action:manipulation;backgro
 .pc{font-size:clamp(24px,9vw,40px);line-height:1;font-family:'Segoe UI Symbol','Noto Sans Symbols 2','Apple Symbols',sans-serif}
 .pc.w{color:#fff;text-shadow:0 0 2px #000,0 0 2px #000,0 1px 3px #000}
 .pc.b{color:#0f172a;text-shadow:0 0 2px #94a3b8,0 0 1px #94a3b8}
-.ck{width:75%;height:75%;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 8px rgba(0,0,0,.4),inset 0 2px 4px rgba(255,255,255,.3);font-size:1rem}
-.ck.w{background:linear-gradient(135deg,#fff,#cbd5e1);border:2px solid #94a3b8}
-.ck.b{background:linear-gradient(135deg,#1e293b,#0f172a);border:2px solid #475569}
-.ck.k::after{content:'👑'}
+.ck{width:78%;height:78%;border-radius:50%;position:relative;display:flex;align-items:center;justify-content:center;transition:transform .18s ease,box-shadow .18s ease;animation:ckpop .25s ease}
+@keyframes ckpop{from{transform:scale(.7);opacity:.4}to{transform:scale(1);opacity:1}}
+.ck::before{content:'';position:absolute;inset:14%;border-radius:50%}
+.ck.w{background:radial-gradient(circle at 32% 28%,#fff 0%,#f1f5ff 38%,#c9d3ee 100%);box-shadow:0 7px 12px rgba(2,6,23,.55),0 2px 0 #aab6d8,inset 0 -4px 7px rgba(71,85,140,.28),inset 0 3px 5px rgba(255,255,255,.9)}
+.ck.w::before{border:2px solid rgba(100,116,170,.35);box-shadow:inset 0 2px 3px rgba(255,255,255,.7)}
+.ck.b{background:radial-gradient(circle at 32% 28%,#6b7694 0%,#2a3350 42%,#0a0e1c 100%);box-shadow:0 7px 12px rgba(2,6,23,.7),0 2px 0 #05070f,inset 0 -4px 7px rgba(0,0,0,.55),inset 0 3px 5px rgba(255,255,255,.22)}
+.ck.b::before{border:2px solid rgba(148,163,220,.28)}
+.ck.k::after{content:'';position:absolute;inset:26%;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23fbbf24' stroke='%23b45309' stroke-width='1' stroke-linejoin='round' d='M3 18.5h18v2.5H3zM3.5 7l4.5 4.2L12 4.5l4 6.7L20.5 7 18.5 17.5h-13z'/%3E%3C/svg%3E") center/contain no-repeat;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))}
+.ck.k{box-shadow:0 7px 12px rgba(2,6,23,.6),0 0 0 2px rgba(251,191,36,.75),0 0 14px rgba(251,191,36,.45),inset 0 -4px 7px rgba(0,0,0,.25),inset 0 3px 5px rgba(255,255,255,.4)}
+.square.sel-piece .ck{transform:translateY(-3px) scale(1.08)}
+div[data-game=checkers].board-frame{background:linear-gradient(145deg,#1b2342,#0f1529);border-color:#2f3b66;box-shadow:0 24px 50px rgba(79,70,229,.28),0 0 0 1px rgba(255,255,255,.05)}
+#board[data-game=checkers]{border:0;border-radius:14px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06),0 6px 18px rgba(0,0,0,.45)}
+#board[data-game=checkers] .square.light{background:linear-gradient(135deg,#eef1fb,#dbe2f4)}
+#board[data-game=checkers] .square.dark{background:linear-gradient(135deg,#4a5d94,#36467a)}
+#board[data-game=checkers] .square.last{box-shadow:inset 0 0 0 100px rgba(56,189,248,.28)}
+#board[data-game=checkers] .square.selected{background:linear-gradient(135deg,#22d3ee,#6366f1)!important;box-shadow:inset 0 0 0 3px rgba(255,255,255,.55)!important}
+#board[data-game=checkers] .square.move::after{width:32%;height:32%;background:radial-gradient(circle,#4ade80 0%,#22c55e 60%,rgba(34,197,94,.2) 100%);box-shadow:0 0 12px rgba(74,222,128,.75);animation:ckpulse 1.3s ease-in-out infinite}
+#board[data-game=checkers] .square.move.cap::after{background:radial-gradient(circle,#fb7185 0%,#f43f5e 60%,rgba(244,63,94,.2) 100%);box-shadow:0 0 14px rgba(251,113,133,.85)}
+@keyframes ckpulse{0%,100%{transform:scale(.85);opacity:.85}50%{transform:scale(1.1);opacity:1}}
 </style>
 </head>
 <body class="min-h-screen flex flex-col justify-between overflow-x-hidden font-sans pb-16">
@@ -120,7 +135,7 @@ body{user-select:none;-webkit-user-select:none;touch-action:manipulation;backgro
       <div id="timer-opponent" class="px-3 py-1 rounded-lg bg-slate-900 font-mono text-xs font-bold text-amber-400 border border-slate-800">05:00</div>
     </div>
     <div class="w-full flex justify-center items-center my-auto">
-      <div class="w-full max-w-[360px] p-2 bg-slate-900 border-2 border-slate-800 rounded-2xl shadow-2xl">
+      <div class="board-frame w-full max-w-[360px] p-2 bg-slate-900 border-2 border-slate-800 rounded-2xl shadow-2xl">
         <div id="board" class="board-grid rounded-lg overflow-hidden border border-slate-700"></div>
       </div>
     </div>
@@ -528,20 +543,57 @@ function finish(winner,why){
 }
 
 /* ---------- Shashka qoidalari ---------- */
-function ckSteps(r,c,capOnly){
+const CK_DIRS=[[-1,-1],[-1,1],[1,-1],[1,1]];
+// Xom yurishlar: damka istalgan masofaga yuradi va uradi
+function ckRaw(r,c,capOnly){
   const p=S.B[r][c];if(!p)return[];
   const me=p.toLowerCase(),king=p===p.toUpperCase();
-  const dirs=[[-1,-1],[-1,1],[1,-1],[1,1]];
   const fwd=me==='w'?-1:1;
   const out=[];
-  for(const[dr,dc]of dirs){
-    const r1=r+dr,c1=c+dc,r2=r+2*dr,c2=c+2*dc;
-    if(!inb(r1,c1))continue;
-    const mid=S.B[r1][c1];
-    if(mid){if(mid.toLowerCase()!==me&&inb(r2,c2)&&!S.B[r2][c2])out.push({r:r2,c:c2,jump:{r:r1,c:c1}});}
-    else if(!capOnly&&(king||dr===fwd))out.push({r:r1,c:c1});
+  for(const[dr,dc]of CK_DIRS){
+    if(king){
+      let r1=r+dr,c1=c+dc;
+      while(inb(r1,c1)&&!S.B[r1][c1]){
+        if(!capOnly)out.push({r:r1,c:c1});
+        r1+=dr;c1+=dc;
+      }
+      if(inb(r1,c1)&&S.B[r1][c1].toLowerCase()!==me){
+        let r2=r1+dr,c2=c1+dc;
+        while(inb(r2,c2)&&!S.B[r2][c2]){
+          out.push({r:r2,c:c2,jump:{r:r1,c:c1}});
+          r2+=dr;c2+=dc;
+        }
+      }
+    }else{
+      const r1=r+dr,c1=c+dc,r2=r+2*dr,c2=c+2*dc;
+      if(!inb(r1,c1))continue;
+      const mid=S.B[r1][c1];
+      if(mid){if(mid.toLowerCase()!==me&&inb(r2,c2)&&!S.B[r2][c2])out.push({r:r2,c:c2,jump:{r:r1,c:c1}});}
+      else if(!capOnly&&dr===fwd)out.push({r:r1,c:c1});
+    }
   }
   return out;
+}
+// Damka urgandan keyin yana urish imkoni bo'lgan katakka tushishi shart
+function ckSteps(r,c,capOnly){
+  const moves=ckRaw(r,c,capOnly);
+  if(!capOnly)return moves;
+  const p=S.B[r][c];if(!p||p!==p.toUpperCase())return moves;
+  const groups=new Map();
+  moves.forEach(m=>{const k=m.jump.r+','+m.jump.c;(groups.get(k)||groups.set(k,[]).get(k)).push(m);});
+  const res=[];
+  groups.forEach(list=>{
+    if(list.length<2){res.push(...list);return;}
+    const cont=list.filter(m=>{
+      const jp=S.B[m.jump.r][m.jump.c];
+      S.B[r][c]=null;S.B[m.jump.r][m.jump.c]=null;S.B[m.r][m.c]=p;
+      const more=ckRaw(m.r,m.c,true).length>0;
+      S.B[m.r][m.c]=null;S.B[m.jump.r][m.jump.c]=jp;S.B[r][c]=p;
+      return more;
+    });
+    res.push(...(cont.length?cont:list));
+  });
+  return res;
 }
 function ckAnyCapture(t){
   for(let r=0;r<8;r++)for(let c=0;c<8;c++){const p=S.B[r][c];if(p&&p.toLowerCase()===t&&ckSteps(r,c,true).length)return true;}
@@ -566,7 +618,7 @@ function ckMove(from,to){
   if(p==='w'&&to.r===0){S.B[to.r][to.c]='W';promoted=true;}
   if(p==='b'&&to.r===7){S.B[to.r][to.c]='B';promoted=true;}
   S.chain=null;
-  if(to.jump&&!promoted&&ckSteps(to.r,to.c,true).length)S.chain={r:to.r,c:to.c};  // ketma-ket urish
+  if(to.jump&&ckSteps(to.r,to.c,true).length)S.chain={r:to.r,c:to.c};  // ketma-ket urish
   else S.turn=opp(S.turn);
 }
 
@@ -620,7 +672,7 @@ function onRoom(me,d){
 /* ---------- Chizish ---------- */
 function render(){
   const el=$('board');if(!S)return;
-  el.innerHTML='';
+  el.innerHTML='';el.dataset.game=S.game;if(el.parentElement)el.parentElement.dataset.game=S.game;
   const flip=S.mode==='friend'&&S.my==='b';
   for(let i=0;i<8;i++)for(let j=0;j<8;j++){
     const r=flip?7-i:i,c=flip?7-j:j;
@@ -628,7 +680,9 @@ function render(){
     d.className='square '+((r+c)%2?'dark':'light');
     if(S.last&&((S.last.fr===r&&S.last.fc===c)||(S.last.tr===r&&S.last.tc===c)))d.classList.add('last');
     if(S.sel&&S.sel.r===r&&S.sel.c===c)d.classList.add('selected');
-    if(S.moves.some(m=>m.r===r&&m.c===c))d.classList.add('move');
+    const mv0=S.moves.find(m=>m.r===r&&m.c===c);
+    if(mv0){d.classList.add('move');if(mv0.jump)d.classList.add('cap');}
+    if(S.game==='checkers'&&S.sel&&S.sel.r===r&&S.sel.c===c)d.classList.add('sel-piece');
     const p=pieceAt(r,c);
     if(p){
       const x=document.createElement('div');
