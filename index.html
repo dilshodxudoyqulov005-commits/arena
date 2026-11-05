@@ -318,7 +318,7 @@ $('leaders').innerHTML=EMPTY_LEADERS;
 /* ---------- Majburiy obuna ---------- */
 const CHANNEL_URL='https://t.me/arena_shaxmat';
 // Haqiqiy tekshiruv uchun Cloudflare Worker manzili (worker.js). Bo'sh bo'lsa, tekshiruv "ishonchga asoslangan" bo'ladi.
-const SUB_CHECK_URL='';
+const SUB_CHECK_URL='https://arena-sub.dilshodxudoyqulov08.workers.dev/';
 window.subOk=false;
 window.openChannel=function(){hap('light');tg&&tg.openTelegramLink?tg.openTelegramLink(CHANNEL_URL):window.open(CHANNEL_URL,'_blank');};
 function gateMsg(t){$('gate-msg').innerText=t;}
