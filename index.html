@@ -9,14 +9,15 @@
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Playfair+Display:wght@600;700;800&display=swap" rel="stylesheet">
 <script>
-tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Plus Jakarta Sans','sans-serif']},colors:{brand:{300:'#93c5fd',400:'#60a5fa',500:'#3b82f6',600:'#2563eb',700:'#1d4ed8'},darkBorder:'#232d42'}}}}
+tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Plus Jakarta Sans','sans-serif'],serif:['Playfair Display','Georgia','serif']},colors:{brand:{300:'#e8c872',400:'#d9b44a',500:'#c9a227',600:'#b08a1c',700:'#8f6f12'},slate:{50:'#faf7f2',100:'#f3ede2',200:'#e5dccb',300:'#cfc3ad',400:'#a89a80',500:'#857762',600:'#5f5445',700:'#443b30',800:'#2d261e',900:'#1e1914',950:'#14100c'},darkBorder:'#3a3025'}}}}
 </script>
 <style>
 :root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px)}
-body{user-select:none;-webkit-user-select:none;touch-action:manipulation;background:#0b0f19;color:#f8fafc}
-.glass-panel{background:rgba(21,28,44,.75);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.08)}
+body{user-select:none;-webkit-user-select:none;touch-action:manipulation;background:radial-gradient(900px 480px at 50% -8%,rgba(201,162,39,.13),transparent 70%),#14100c;color:#f6efe2}
+h2,h3{font-family:'Playfair Display',Georgia,serif;letter-spacing:.2px}
+.glass-panel{background:linear-gradient(160deg,rgba(44,34,25,.88),rgba(28,21,15,.9));backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid rgba(201,162,39,.2);box-shadow:0 8px 24px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,235,190,.05)}
 .board-grid{display:grid;grid-template-columns:repeat(8,1fr);grid-template-rows:repeat(8,1fr);aspect-ratio:1/1}
 .square{display:flex;align-items:center;justify-content:center;position:relative;cursor:pointer}
 .square.light{background:linear-gradient(135deg,#f4ead3,#e8dabd)}
@@ -46,21 +47,21 @@ div.board-frame{background:linear-gradient(145deg,#3d2616,#26150c);border:1px so
 <body class="min-h-screen flex flex-col justify-between overflow-x-hidden font-sans pb-16">
 
 
-<div id="gate" class="fixed inset-0 z-[100] bg-[#0b0f19] flex items-center justify-center p-6">
+<div id="gate" class="fixed inset-0 z-[100] bg-[#14100c] flex items-center justify-center p-6">
   <div class="glass-panel rounded-2xl p-6 max-w-sm w-full text-center space-y-4">
-    <div class="w-16 h-16 rounded-full bg-sky-500/10 border border-sky-500/30 flex items-center justify-center text-sky-400 text-3xl mx-auto"><i class="fa-brands fa-telegram"></i></div>
+    <div class="w-16 h-16 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 text-3xl mx-auto"><i class="fa-brands fa-telegram"></i></div>
     <div>
       <h3 class="font-bold text-lg">Kanalga obuna bo'ling</h3>
       <p id="gate-msg" class="text-xs text-slate-400 mt-1">O'yinni boshlash uchun rasmiy kanalimizga obuna bo'lishingiz kerak.</p>
     </div>
-    <button onclick="openChannel()" class="w-full py-3 bg-gradient-to-r from-sky-600 to-blue-600 text-white font-bold text-xs rounded-xl active:scale-95"><i class="fa-solid fa-bullhorn"></i> Kanalga o'tish</button>
+    <button onclick="openChannel()" class="w-full py-3 bg-gradient-to-r from-amber-600 to-amber-800 text-white font-bold text-xs rounded-xl active:scale-95"><i class="fa-solid fa-bullhorn"></i> Kanalga o'tish</button>
     <button id="gate-check" onclick="checkSub(true)" class="w-full py-3 bg-slate-800 text-slate-200 border border-slate-700 font-bold text-xs rounded-xl active:scale-95"><i class="fa-solid fa-check"></i> Obuna bo'ldim, tekshirish</button>
   </div>
 </div>
 
 <header class="glass-panel sticky top-0 z-40 px-4 py-3 flex items-center justify-between border-b border-darkBorder">
   <div class="flex items-center space-x-3">
-    <div id="user-avatar" class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-indigo-500 flex items-center justify-center font-bold text-white text-lg">U</div>
+    <div id="user-avatar" class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-amber-800 flex items-center justify-center font-bold text-white text-lg">U</div>
     <div>
       <h1 id="user-name" class="font-bold text-sm text-slate-100">Foydalanuvchi</h1>
       <span class="text-xs text-brand-400 font-medium">Reyting: <span id="hdr-rating">0</span> ball · <span id="hdr-coins">—</span> 🪙</span>
@@ -75,9 +76,9 @@ div.board-frame{background:linear-gradient(145deg,#3d2616,#26150c);border:1px so
 
   <section id="screen-lobby" class="w-full space-y-6 my-auto nav-screen">
     <div class="text-center space-y-2">
-      <h2 class="text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-300 to-purple-400">Telegram Arena</h2>
+      <h2 class="text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-100 to-amber-500">Telegram Arena</h2>
       <p class="text-xs text-slate-400">Sevimli o'yiningizni tanlang va do'stlar bilan onlayn o'ynang!</p>
-      <p class="text-[11px] text-amber-400/90">Onlayn o'yin: 5 🪙 tikiladi · g'alaba +10 · durang 0 · mag'lubiyat −5</p>
+      <p class="text-[11px] text-amber-400/90">Onlayn va do'st bilan o'yin: 5 🪙 tikiladi · g'alaba +10 · durang 0 · mag'lubiyat −5</p>
     </div>
     <div class="glass-panel p-4 rounded-2xl flex justify-around text-center">
       <div><div class="text-xs text-slate-400">G'alabalar</div><div id="stat-wins" class="text-lg font-bold text-emerald-400">0</div></div>
@@ -99,22 +100,22 @@ div.board-frame{background:linear-gradient(145deg,#3d2616,#26150c);border:1px so
 
   <section id="screen-friends" class="w-full hidden space-y-4 nav-screen">
     <div class="text-center space-y-1">
-      <h2 class="text-xl font-bold flex items-center justify-center gap-2"><i class="fa-solid fa-users text-indigo-400"></i> Do'stlarni taklif qilish</h2>
+      <h2 class="text-xl font-bold flex items-center justify-center gap-2"><i class="fa-solid fa-users text-amber-400"></i> Do'stlarni taklif qilish</h2>
       <p class="text-xs text-slate-400">Do'stlaringizni taklif qiling va birga o'ynang</p>
     </div>
     <div class="glass-panel p-5 rounded-2xl space-y-4 text-center">
-      <div class="w-16 h-16 rounded-full bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400 text-3xl mx-auto"><i class="fa-solid fa-user-plus"></i></div>
+      <div class="w-16 h-16 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 text-3xl mx-auto"><i class="fa-solid fa-user-plus"></i></div>
       <div>
         <h3 class="font-bold text-base">Bonus tangalar yutib oling!</h3>
         <p class="text-xs text-slate-400 mt-1">Do'stingizga havola yuboring. Onlayn o'yinda g'alaba +10 🪙, durang 0, mag'lubiyat −5 🪙 (har o'yinga 5 🪙 tikiladi). Yangi o'yinchiga 50 🪙 beriladi.</p>
       </div>
-      <button onclick="shareLink('')" class="w-full py-3 bg-gradient-to-r from-brand-600 to-indigo-600 text-white font-bold text-xs rounded-xl active:scale-95 transition-all"><i class="fa-solid fa-paper-plane"></i> Taklif havolasini yuborish</button>
+      <button onclick="shareLink('')" class="w-full py-3 bg-gradient-to-r from-brand-600 to-amber-800 text-white font-bold text-xs rounded-xl active:scale-95 transition-all"><i class="fa-solid fa-paper-plane"></i> Taklif havolasini yuborish</button>
     </div>
   </section>
 
   <section id="screen-profile" class="w-full hidden space-y-4 nav-screen">
     <div class="glass-panel p-5 rounded-2xl text-center space-y-3">
-      <div id="profile-avatar" class="w-20 h-20 rounded-2xl bg-gradient-to-tr from-brand-600 to-indigo-500 flex items-center justify-center font-bold text-3xl mx-auto border-2 border-white/20">U</div>
+      <div id="profile-avatar" class="w-20 h-20 rounded-2xl bg-gradient-to-tr from-brand-600 to-amber-800 flex items-center justify-center font-bold text-3xl mx-auto border-2 border-white/20">U</div>
       <div><h3 id="profile-name" class="font-bold text-lg">Foydalanuvchi</h3><p class="text-xs text-slate-400">Telegram Arena a'zosi</p></div>
       <div class="grid grid-cols-2 gap-3 pt-2">
         <div class="bg-slate-900/60 p-3 rounded-xl border border-slate-800"><div class="text-[10px] text-slate-400">O'ynalgan o'yinlar</div><div id="stat-games" class="text-base font-bold">0 ta</div></div>
@@ -124,10 +125,11 @@ div.board-frame{background:linear-gradient(145deg,#3d2616,#26150c);border:1px so
   </section>
 
   <section id="screen-game" class="w-full hidden flex-1 flex flex-col justify-between space-y-3">
-    <div class="glass-panel p-3 rounded-xl flex items-center justify-between">
+    <div onclick="showOppProfile()" class="glass-panel p-3 rounded-xl flex items-center justify-between relative">
+      <div id="opp-bubble" class="hidden absolute -bottom-3 left-14 z-10 px-3 py-1 rounded-2xl rounded-tl-sm bg-amber-100 text-slate-900 text-sm font-semibold shadow-lg max-w-[60%] truncate"></div>
       <div class="flex items-center space-x-3">
         <div id="opponent-avatar" class="w-9 h-9 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-sm text-slate-300">O</div>
-        <div><div id="opponent-name" class="font-bold text-xs text-slate-200">Raqib</div><div id="opponent-status" class="text-[10px] text-emerald-400"></div></div>
+        <div><div id="opponent-name" class="font-bold text-xs text-slate-200">Raqib</div><div id="opponent-meta" class="text-[10px] text-amber-300/90"></div><div id="opponent-status" class="text-[10px] text-emerald-400"></div></div>
       </div>
       <div id="timer-opponent" class="px-3 py-1 rounded-lg bg-slate-900 font-mono text-xs font-bold text-amber-400 border border-slate-800">05:00</div>
     </div>
@@ -142,6 +144,14 @@ div.board-frame{background:linear-gradient(145deg,#3d2616,#26150c);border:1px so
         <div><div id="player-name-game" class="font-bold text-xs text-slate-200">Siz</div><div id="player-status" class="text-[10px] text-slate-400"></div></div>
       </div>
       <div id="timer-player" class="px-3 py-1 rounded-lg bg-slate-900 font-mono text-xs font-bold text-emerald-400 border border-slate-800">05:00</div>
+    </div>
+    <div id="chat-box" class="hidden glass-panel rounded-xl p-2 space-y-1.5">
+      <div id="chat-log" class="h-[52px] overflow-y-auto text-[11px] text-slate-200 space-y-0.5 px-1"></div>
+      <div id="chat-emojis" class="flex gap-1.5 overflow-x-auto pb-0.5"></div>
+      <div class="flex gap-1.5">
+        <input id="chat-input" maxlength="60" autocomplete="off" placeholder="Qisqa xabar..." class="flex-1 min-w-0 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 outline-none focus:border-amber-500/60">
+        <button onclick="sendChat()" class="px-3 bg-gradient-to-br from-amber-500 to-amber-700 text-white rounded-lg active:scale-95"><i class="fa-solid fa-paper-plane text-xs"></i></button>
+      </div>
     </div>
     <div class="flex justify-between items-center gap-2 pt-2">
       <button onclick="backToLobby()" class="px-4 py-2 bg-slate-800 text-slate-300 font-bold text-xs rounded-xl border border-slate-700 active:scale-95"><i class="fa-solid fa-house"></i> Chiqish</button>
@@ -198,20 +208,20 @@ const FIREBASE_CONFIG={
     .then(c=>{window.fbUid=c.user.uid;return c.user.uid;})
     .catch(e=>{console.error('Auth xatosi',e);return null;});
 
-  window.fbCreate=async function(game,state){
+  window.fbCreate=async function(game,state,key,name){
     const r=db.ref('rooms').push();
-    await r.set({gameType:game,gameState:state,turn:'w',playerWhite:window.fbUid,status:'waiting',createdAt:firebase.database.ServerValue.TIMESTAMP});
+    await r.set({gameType:game,gameState:state,turn:'w',playerWhite:window.fbUid,wKey:key||null,wName:name||null,status:'waiting',createdAt:firebase.database.ServerValue.TIMESTAMP});
     return r.key;
   };
 
-  window.fbJoin=async function(id){
+  window.fbJoin=async function(id,key,name){
     const uid=window.fbUid;
     const res=await ref(id).transaction(d=>{
       if(d===null)return d;                       // xona yo'q
       if(d.playerWhite===uid||d.playerBlack===uid)return d;
       if(d.playerBlack)return;                    // to'lgan: abort
       if(d.stk&&Object.values(d.stk).includes('refunded'))return;
-      d.playerBlack=uid;d.status='playing';return d;
+      d.playerBlack=uid;d.bKey=key||null;d.bName=name||null;d.status='playing';return d;
     });
     const d=res.snapshot.val();
     if(!d)return null;
@@ -219,6 +229,43 @@ const FIREBASE_CONFIG={
     if(d.playerBlack===uid)return 'b';
     return null;
   };
+
+  // Tasodifiy raqib qidirish: bitta "navbat" katagi orqali tranzaksiya bilan juftlanadi
+  window.fbMatch=async function(game,key,name,state){
+    for(let attempt=0;attempt<3;attempt++){
+      const rr=db.ref('rooms').push();
+      await rr.set({gameType:game,gameState:state,turn:'w',playerWhite:window.fbUid,wKey:key,wName:name,status:'waiting',pub:true,createdAt:firebase.database.ServerValue.TIMESTAMP});
+      let taken=null;
+      await db.ref('queue/'+game).transaction(q=>{
+        taken=null;
+        const now=Date.now();
+        if(q&&q.uid!==window.fbUid&&now-(q.ts||0)<90000){taken=q;return null;}
+        return {room:rr.key,uid:window.fbUid,key:key,name:name,ts:now};
+      });
+      if(!taken)return {room:rr.key,host:true};
+      await rr.remove();
+      const color=await window.fbJoin(taken.room,key,name);
+      if(color==='b')return {room:taken.room,host:false,color:color};
+    }
+    return null;
+  };
+  window.fbQueueTouch=function(game){
+    return db.ref('queue/'+game).transaction(q=>(q&&q.uid===window.fbUid)?Object.assign({},q,{ts:Date.now()}):q);
+  };
+  window.fbUnqueue=function(game){
+    return db.ref('queue/'+game).transaction(q=>(q&&q.uid===window.fbUid)?null:q);
+  };
+
+  // Qisqa chat
+  let chatOff=null;
+  window.fbChatListen=function(room,cb){
+    if(chatOff)chatOff();
+    const q=db.ref('rooms/'+room+'/chat').limitToLast(30);
+    const h=q.on('child_added',s=>cb(s.val()));
+    chatOff=()=>{q.off('child_added',h);chatOff=null;};
+  };
+  window.fbChatOff=()=>{if(chatOff)chatOff();};
+  window.fbChatSend=function(room,msg){return db.ref('rooms/'+room+'/chat').push(msg);};
 
   window.fbListen=function(id,cb){
     if(off)off();
@@ -295,7 +342,7 @@ const FIREBASE_CONFIG={
 
 <script>
 const tg=window.Telegram?.WebApp;
-if(tg){tg.ready();tg.expand();}
+if(tg){tg.ready();tg.expand();try{tg.setHeaderColor('#14100c');tg.setBackgroundColor('#14100c');}catch(e){}}
 const $=id=>document.getElementById(id);
 const hap=(t='light')=>{const h=tg&&tg.HapticFeedback;if(!h)return;t==='success'?h.notificationOccurred('success'):h.impactOccurred(t);};
 
@@ -312,19 +359,21 @@ let timer=null,botTimer=null;
 
 /* ---------- Lobby / navigatsiya ---------- */
 const GAMES=[
- ['chess','Shahmat (Chess)',"Klassik strategik shahmat o'yini",'fa-chess','hover:border-brand-500/50','bg-brand-500/10 border-brand-500/30 text-brand-400','bg-brand-600','bg-indigo-600'],
- ['checkers','Shashka (Checkers)',"An'anaviy 8x8 shashka bahsi",'fa-chess-board','hover:border-purple-500/50','bg-purple-500/10 border-purple-500/30 text-purple-400','bg-purple-600','bg-fuchsia-600']
+ ['chess','Shahmat',"Klassik strategik shahmat o'yini",'fa-chess','hover:border-amber-500/50','bg-amber-500/10 border-amber-500/30 text-amber-400'],
+ ['checkers','Shashka',"An'anaviy 8x8 shashka bahsi",'fa-chess-board','hover:border-orange-500/50','bg-orange-500/10 border-orange-500/30 text-orange-400']
 ];
-$('game-cards').innerHTML=GAMES.map(([id,t,d,ic,hv,box,b1,b2])=>`
-<div class="glass-panel p-5 rounded-2xl border border-slate-800 ${hv} transition-all shadow-xl">
+const BTN='py-2.5 text-white font-semibold text-[11px] rounded-xl active:scale-95 flex flex-col items-center gap-1 shadow-lg';
+$('game-cards').innerHTML=GAMES.map(([id,t,d,ic,hv,box])=>`
+<div class="glass-panel p-5 rounded-2xl ${hv} transition-all">
   <div class="flex items-center space-x-3">
     <div class="w-12 h-12 rounded-xl border flex items-center justify-center text-2xl ${box}"><i class="fa-solid ${ic}"></i></div>
     <div><h3 class="font-bold text-lg">${t}</h3><p class="text-xs text-slate-400">${d}</p></div>
   </div>
-  <div class="grid grid-cols-3 gap-2 mt-4">
-    <button onclick="startMode('${id}','friend')" class="py-2.5 ${b1} text-white font-semibold text-[11px] rounded-xl active:scale-95 flex flex-col items-center gap-1"><i class="fa-solid fa-user-group text-sm"></i> Onlayn</button>
-    <button onclick="startMode('${id}','bot')" class="py-2.5 ${b2} text-white font-semibold text-[11px] rounded-xl active:scale-95 flex flex-col items-center gap-1"><i class="fa-solid fa-robot text-sm"></i> Bot bilan</button>
-    <button onclick="startMode('${id}','pass')" class="py-2.5 bg-slate-800 text-slate-200 font-semibold text-[11px] rounded-xl border border-slate-700 active:scale-95 flex flex-col items-center gap-1"><i class="fa-solid fa-mobile-screen text-sm"></i> 1v1 Oflayn</button>
+  <div class="grid grid-cols-2 gap-2 mt-4">
+    <button onclick="startMode('${id}','friend',{random:true})" class="${BTN} bg-gradient-to-br from-amber-500 to-amber-700"><i class="fa-solid fa-globe text-sm"></i> Onlayn (tasodifiy raqib)</button>
+    <button onclick="startMode('${id}','friend')" class="${BTN} bg-gradient-to-br from-emerald-700 to-emerald-900"><i class="fa-solid fa-user-plus text-sm"></i> Do'st bilan</button>
+    <button onclick="startMode('${id}','bot')" class="${BTN} bg-gradient-to-br from-stone-600 to-stone-800"><i class="fa-solid fa-robot text-sm"></i> Bot bilan</button>
+    <button onclick="startMode('${id}','pass')" class="${BTN} bg-slate-800 border border-slate-700"><i class="fa-solid fa-mobile-screen text-sm"></i> 1v1 Oflayn</button>
   </div>
 </div>`).join('');
 
@@ -360,6 +409,58 @@ async function loadLeaders(){
   }catch(e){console.error(e);box.innerHTML='<div class="text-center text-xs text-slate-400 p-6">Reytingni yuklab bo\'lmadi.</div>';}
 }
 $('leaders').innerHTML=EMPTY_LEADERS;
+
+/* ---------- Raqib profili ---------- */
+function oppFromRoom(d){
+  const ok=S.my==='w'?d.bKey:d.wKey,on=S.my==='w'?d.bName:d.wName;
+  if(ok&&ok!==S.oppKey){
+    S.oppKey=ok;S.oppName=on||'Raqib';S.oppInfo=null;
+    const me=S;
+    if(window.fbUser)window.fbUser(ok).then(u=>{if(S===me&&S.oppKey===ok){S.oppInfo=u||{};renderOpp();}}).catch(()=>{});
+  }
+}
+function renderOpp(){
+  if(!S)return;
+  if(S.mode!=='friend'){$('opponent-meta').innerText='';return;}
+  const o=S.oppInfo;
+  $('opponent-name').innerText=S.oppName||(S.random&&S.waiting?'Raqib qidirilmoqda…':'Raqib (Onlayn)');
+  $('opponent-avatar').innerText=(S.oppName||'?').charAt(0).toUpperCase();
+  $('opponent-meta').innerText=o?('🏆 '+(o.rating||0)+' · '+(o.wins||0)+" g'alaba · "+(o.games||0)+" o'yin"):'';
+}
+window.showOppProfile=function(){
+  if(!S||S.mode!=='friend'||!S.oppKey)return;
+  const o=S.oppInfo||{},g=o.games||0,w=o.wins||0;
+  showModal(S.oppName||'Raqib',"Reyting: "+(o.rating||0)+" ball\nO'yinlar: "+g+"\nG'alaba: "+w+" · Mag'lubiyat: "+(o.losses||0)+" · Durang: "+(o.draws||0)+"\nG'alaba nisbati: "+(g?Math.round(w*100/g):0)+"%");
+};
+
+/* ---------- Qisqa chat ---------- */
+const QUICK=['👍','😂','😮','😡','😢','👏','🔥','🤝','GG','⏳'];
+$('chat-emojis').innerHTML=QUICK.map(e=>`<button onclick="sendChat('${e}')" class="shrink-0 px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700 text-sm active:scale-90">${e}</button>`).join('');
+let lastChat=0,bubbleT=null;
+window.sendChat=function(txt){
+  if(!S||S.mode!=='friend'||!S.room||!window.fbChatSend)return;
+  const inp=$('chat-input');
+  const t=String(txt!=null?txt:inp.value).trim().slice(0,60);
+  if(!t)return;
+  const now=Date.now();if(now-lastChat<800)return;lastChat=now;
+  window.fbChatSend(S.room,{k:myKey(),n:myName(),t:t,ts:now}).catch(()=>{});
+  if(txt==null)inp.value='';
+  hap('light');
+};
+$('chat-input').addEventListener('keydown',e=>{if(e.key==='Enter')sendChat();});
+function addChat(m){
+  if(!m||!m.t)return;
+  const log=$('chat-log'),mine=m.k===myKey();
+  const row=document.createElement('div');
+  row.innerHTML='<span class="'+(mine?'text-amber-400':'text-emerald-300')+' font-semibold">'+esc(mine?'Siz':(m.n||'Raqib'))+':</span> <span>'+esc(m.t)+'</span>';
+  log.appendChild(row);log.scrollTop=log.scrollHeight;
+  while(log.children.length>40)log.removeChild(log.firstChild);
+  if(!mine&&Date.now()-(m.ts||0)<6000){
+    const b=$('opp-bubble');b.textContent=m.t;b.classList.remove('hidden');
+    clearTimeout(bubbleT);bubbleT=setTimeout(()=>b.classList.add('hidden'),3500);
+    hap('light');
+  }
+}
 
 /* ---------- Majburiy obuna ---------- */
 const CHANNEL_URL='https://t.me/arena_shaxmat';
@@ -430,17 +531,22 @@ function leaveRoom(){
     const k=myKey(),rm=S.room;S.staked=false;
     window.fbRefund(rm,k).then(ok=>{if(ok)refreshStats();}).catch(()=>{});
   }
+  if(S&&S.qTimer){clearInterval(S.qTimer);S.qTimer=null;}
+  if(S&&S.random&&S.waiting&&window.fbUnqueue)window.fbUnqueue(S.game).catch(()=>{});
   clearInterval(timer);timer=null;clearTimeout(botTimer);
   if(window.fbUnlisten)window.fbUnlisten();
+  if(window.fbChatOff)window.fbChatOff();
 }
 
-window.startMode=async function(game,mode){
+window.startMode=async function(game,mode,opts){
+  opts=opts||{};
   if(!window.subOk)return;
   hap('medium');leaveRoom();
-  const me=S={game,mode,my:'w',room:null,waiting:false,sel:null,moves:[],last:null,over:false,t:{w:300,b:300},chess:null,B:null,turn:'w',chain:null};
+  const me=S={game,mode,random:!!opts.random,my:'w',room:null,waiting:false,sel:null,moves:[],last:null,over:false,t:{w:300,b:300},chess:null,B:null,turn:'w',chain:null};
   document.querySelectorAll('.nav-screen').forEach(e=>e.classList.add('hidden'));
   $('screen-game').classList.remove('hidden');
-  $('share-room-btn').classList.toggle('hidden',mode!=='friend');
+  $('share-room-btn').classList.toggle('hidden',mode!=='friend'||!!opts.random);
+  $('chat-box').classList.toggle('hidden',mode!=='friend');$('chat-log').innerHTML='';$('opp-bubble').classList.add('hidden');
   const names={bot:['AI Bot 🤖','🤖'],pass:['Raqib (Oflayn)','O'],friend:['Raqib (Onlayn)','O']};
   $('opponent-name').innerText=names[mode][0];$('opponent-avatar').innerText=names[mode][1];
   initEngine();render();
@@ -454,14 +560,21 @@ window.startMode=async function(game,mode){
       const coins=await window.fbCoins(key);
       if(S!==me)return;
       if(coins<5){showModal('Tanga yetarli emas',"Onlayn o'yin uchun 5 🪙 kerak, sizda "+coins+" 🪙 bor. Bot yoki oflayn rejimda o'ynashingiz mumkin.");backToLobby();return;}
-      if(joinId){
+      if(opts.random){
+        const r=await window.fbMatch(game,key,myName(),stateString());
+        if(S!==me){if(r&&r.host){window.fbUnqueue(game);}return;}
+        if(!r){showModal('Raqib topilmadi',"Hozircha raqib topilmadi, birozdan keyin qayta urinib ko'ring.");backToLobby();return;}
+        me.room=r.room;
+        if(r.host){me.my='w';me.waiting=true;me.qTimer=setInterval(()=>{window.fbQueueTouch(game);},30000);}
+        else me.my=r.color;
+      }else if(joinId){
         const id=joinId;joinId=null;
-        const color=await window.fbJoin(id);
+        const color=await window.fbJoin(id,key,myName());
         if(S!==me)return;
         if(!color){showModal('Xona topilmadi',"Xona mavjud emas yoki to'lgan.");return;}
         me.room=id;me.my=color;
       }else{
-        me.room=await window.fbCreate(game,stateString());
+        me.room=await window.fbCreate(game,stateString(),key,myName());
         if(S!==me)return;
         me.waiting=true;
       }
@@ -470,6 +583,7 @@ window.startMode=async function(game,mode){
       if(st==='poor'){showModal('Tanga yetarli emas',"Tikish uchun 5 🪙 yetmadi.");backToLobby();return;}
       me.staked=true;refreshStats();
       window.fbListen(me.room,d=>onRoom(me,d));
+      window.fbChatListen(me.room,m=>{if(S===me)addChat(m);});
     }catch(e){console.error(e);showModal('Xato',"Xona bilan ishlashda xatolik yuz berdi.");return;}
   }
   startTimer();render();
@@ -721,7 +835,12 @@ function onRoom(me,d){
   if(d.gameType!==S.game){S.game=d.gameType;initEngine();}
   S.my=d.playerWhite===window.fbUid?'w':'b';
   S.waiting=d.status==='waiting';
+  if(!S.waiting&&S.qTimer){clearInterval(S.qTimer);S.qTimer=null;}
+  oppFromRoom(d);
   if(d.resigned&&!S.over){finish(d.resigned==='w'?'b':'w',"Raqib taslim bo'ldi. ");return;}
+  const sig=[d.gameState,d.turn,d.status,JSON.stringify(d.lastMove||null),d.resigned||'',d.playerBlack||''].join('|');
+  if(S.sig===sig)return;
+  S.sig=sig;
   try{
     if(S.game==='chess'){if(d.gameState!==S.chess.fen())S.chess.load(d.gameState);S.turn=S.chess.turn();}
     else{const o=JSON.parse(d.gameState);S.B=o.b;S.chain=o.c;S.turn=d.turn;}
@@ -763,8 +882,8 @@ function render(){
     :S.waiting?'<span class="text-amber-400">Raqib kutilmoqda...</span>'
     :mine?`<span class="text-emerald-400 font-bold animate-pulse">Sizning yurishingiz!</span> <span class="text-slate-500">(${colorTxt})</span>`
     :`<span class="text-slate-400">Raqib navbati... (${colorTxt})</span>`;
-  $('opponent-status').innerText=S.over?'':S.waiting?'Havolani do\'stingizga yuboring':mine?'Yurishingizni kutmoqda...':(S.mode==='bot'?"Bot o'ylamoqda... 🤖":"O'ylamoqda...");
-  showTimers();
+  $('opponent-status').innerText=S.over?'':S.waiting?(S.random?'Raqib qidirilmoqda...':'Havolani do\'stingizga yuboring'):mine?'Yurishingizni kutmoqda...':(S.mode==='bot'?"Bot o'ylamoqda... 🤖":"O'ylamoqda...");
+  showTimers();renderOpp();
 }
 
 /* ---------- Ulashish ---------- */
