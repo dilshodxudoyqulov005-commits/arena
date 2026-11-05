@@ -603,7 +603,10 @@ function showModal(title,msg){
   $('modal-title').innerText=title;$('modal-message').innerText=msg;
   $('modal').classList.remove('hidden');$('modal').classList.add('flex');
 }
-$('modal-close-btn').addEventListener('click',()=>{$('modal').classList.add('hidden');$('modal').classList.remove('flex');});
+$('modal-close-btn').addEventListener('click',()=>{
+  $('modal').classList.add('hidden');$('modal').classList.remove('flex');
+  if(S&&S.over)backToLobby();   // o'yin tugagan bo'lsa, bosh menyuga qaytamiz
+});
 
 /* ---------- O'yinni boshlash ---------- */
 function leaveRoom(){
@@ -790,7 +793,13 @@ function finish(winner,why){
   else m=winner===S.my?"Tabriklaymiz, siz g'alaba qozondingiz!":"Siz mag'lub bo'ldingiz.";
   let coinTxt='';
   if(S.mode==='friend'&&S.staked)coinTxt=!winner?"\nTanga qaytarildi (0 🪙)":winner===S.my?"\n+10 🪙 yutdingiz":"\n−5 🪙";
-  showModal("O'yin yakunlandi",why+m+coinTxt);
+  showModal("O'yin yakunlandi",why+m+coinTxt+"\n\nBosh menyuga qaytasiz...");
+  const endedGame=S;
+  setTimeout(()=>{
+    if(S!==endedGame||!S.over)return;
+    $('modal').classList.add('hidden');$('modal').classList.remove('flex');
+    backToLobby();
+  },5000);
   if(S.mode==='friend'&&S.room&&!S.recorded&&window.fbRecord){
     S.recorded=true;
     const k=myKey(),res=!winner?'draw':(winner===S.my?'win':'loss');
