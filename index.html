@@ -323,6 +323,9 @@ window.subOk=false;
 window.openChannel=function(){hap('light');tg&&tg.openTelegramLink?tg.openTelegramLink(CHANNEL_URL):window.open(CHANNEL_URL,'_blank');};
 function gateMsg(t){$('gate-msg').innerText=t;}
 function gateOpen(){window.subOk=true;$('gate').classList.add('hidden');refreshStats();}
+function subCached(){try{return localStorage.getItem('subVerified')==='1';}catch(e){return false;}}
+function subCache(v){try{v?localStorage.setItem('subVerified','1'):localStorage.removeItem('subVerified');}catch(e){}}
+let lastSubCheck=0;
 window.checkSub=async function(manual){
   const initData=tg&&tg.initData;
   if(!SUB_CHECK_URL){
@@ -332,15 +335,28 @@ window.checkSub=async function(manual){
     return;
   }
   if(!initData){gateMsg("Ilovani Telegram ichida oching.");return;}
-  const btn=$('gate-check');btn.disabled=true;
+  // Avval obuna tasdiqlangan bo'lsa, kutmasdan ochamiz, tekshiruv orqada boradi
+  if(!manual&&subCached()&&!window.subOk)gateOpen();
+  const btn=$('gate-check');if(manual)btn.disabled=true;
   try{
     const r=await fetch(SUB_CHECK_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({initData})});
     const d=await r.json();
-    if(d.member)return gateOpen();
-    gateMsg(manual?"Siz hali obuna bo'lmagansiz. Kanalga obuna bo'lib, qayta tekshiring.":"O'yinni boshlash uchun rasmiy kanalimizga obuna bo'lishingiz kerak.");
-  }catch(e){gateMsg("Tekshirib bo'lmadi. Internetni tekshirib, qayta urinib ko'ring.");}
+    lastSubCheck=Date.now();
+    if(d.member){subCache(true);return gateOpen();}
+    if(d.error){ // texnik xato: tasdiqlangan foydalanuvchini chiqarib yubormaymiz
+      if(!window.subOk)gateMsg("Tekshiruvda xato: "+d.error+(d.detail?" ("+d.detail+")":""));
+      return;
+    }
+    // Kanaldan chiqib ketgan yoki hali obuna bo'lmagan
+    subCache(false);window.subOk=false;
+    $('gate').classList.remove('hidden');
+    gateMsg(manual?"Siz hali obuna bo'lmagansiz. Kanalga obuna bo'lib, qayta tekshiring.":"O'yinni davom ettirish uchun rasmiy kanalimizga obuna bo'lishingiz kerak.");
+  }catch(e){
+    if(!window.subOk)gateMsg("Tekshirib bo'lmadi. Internetni tekshirib, qayta urinib ko'ring.");
+  }
   finally{btn.disabled=false;}
 };
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&Date.now()-lastSubCheck>60000)checkSub(false);});
 window.addEventListener('load',()=>{checkSub(false);});
 
 window.switchTab=function(tab){
