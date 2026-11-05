@@ -87,6 +87,13 @@ div.board-frame{background:linear-gradient(145deg,#3d2616,#26150c);border:1px so
       <div class="border-r border-slate-800"></div>
       <div><div class="text-xs text-slate-400">O'rin</div><div id="stat-rank" class="text-lg font-bold text-amber-400">—</div></div>
     </div>
+    <div class="glass-panel p-3 rounded-2xl flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 text-lg"><i class="fa-solid fa-gift"></i></div>
+        <div><div class="font-bold text-sm">Kunlik bonus</div><div id="daily-sub" class="text-[11px] text-slate-400">Har kuni +5 🪙 bepul</div></div>
+      </div>
+      <button id="daily-btn" onclick="claimDaily()" class="px-4 py-2 bg-gradient-to-br from-amber-500 to-amber-700 text-white font-bold text-xs rounded-xl active:scale-95 disabled:opacity-50">Olish</button>
+    </div>
     <div id="game-cards" class="grid grid-cols-1 gap-4"></div>
   </section>
 
@@ -107,9 +114,10 @@ div.board-frame{background:linear-gradient(145deg,#3d2616,#26150c);border:1px so
       <div class="w-16 h-16 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 text-3xl mx-auto"><i class="fa-solid fa-user-plus"></i></div>
       <div>
         <h3 class="font-bold text-base">Bonus tangalar yutib oling!</h3>
-        <p class="text-xs text-slate-400 mt-1">Do'stingizga havola yuboring. Onlayn o'yinda g'alaba +10 🪙, durang 0, mag'lubiyat −5 🪙 (har o'yinga 5 🪙 tikiladi). Yangi o'yinchiga 50 🪙 beriladi.</p>
+        <p class="text-xs text-slate-400 mt-1">Havolangiz orqali do'stingiz birinchi marta kirsa, sizga +10 🪙 beriladi. U esa 50 🪙 bilan boshlaydi. Onlayn o'yinda g'alaba +10 🪙, durang 0, mag'lubiyat −5 🪙 (har o'yinga 5 🪙 tikiladi).</p>
       </div>
       <button onclick="shareLink('')" class="w-full py-3 bg-gradient-to-r from-brand-600 to-amber-800 text-white font-bold text-xs rounded-xl active:scale-95 transition-all"><i class="fa-solid fa-paper-plane"></i> Taklif havolasini yuborish</button>
+      <div class="text-[11px] text-slate-400">Taklif qilganlar: <span id="ref-count" class="text-amber-400 font-semibold">0 ta do'st · 0 🪙</span></div>
     </div>
   </section>
 
@@ -216,13 +224,16 @@ const FIREBASE_CONFIG={
 
   window.fbJoin=async function(id,key,name){
     const uid=window.fbUid;
+    let host=null;
     const res=await ref(id).transaction(d=>{
       if(d===null)return d;                       // xona yo'q
+      host=d.wKey||null;
       if(d.playerWhite===uid||d.playerBlack===uid)return d;
       if(d.playerBlack)return;                    // to'lgan: abort
       if(d.stk&&Object.values(d.stk).includes('refunded'))return;
       d.playerBlack=uid;d.bKey=key||null;d.bName=name||null;d.status='playing';return d;
     });
+    window.lastHostKey=host;
     const d=res.snapshot.val();
     if(!d)return null;
     if(d.playerWhite===uid)return 'w';
@@ -278,12 +289,43 @@ const FIREBASE_CONFIG={
 
   const STAKE=5,WIN_PRIZE=10,START_COINS=50;
   window.fbEnsureUser=async function(key,name){
+    let created=false;
     const res=await db.ref('users/'+key).transaction(u=>{
+      created=(u===null);
       u=u||{wins:0,losses:0,draws:0,rating:0,games:0};
       if(u.coins==null)u.coins=START_COINS;
       u.name=name;return u;
     });
+    if(created)window.IS_NEW=true;
     return res.snapshot.val();
+  };
+  const REF_BONUS=10,DAILY=5;
+  let tOff=0;
+  db.ref('.info/serverTimeOffset').on('value',s=>{tOff=s.val()||0;});
+  window.fbNow=()=>Date.now()+tOff;
+  // Yangi o'yinchi taklif orqali kirsa, taklif qilganga +10 tanga (bir marta)
+  window.fbCreditInviter=async function(inviterKey,myKey){
+    const inv=(await db.ref('users/'+inviterKey).once('value')).val();
+    if(!inv)return false;
+    const r=await db.ref('users/'+myKey+'/refBy').transaction(v=>v?undefined:inviterKey);
+    if(!r.committed)return false;
+    await db.ref('users/'+inviterKey).transaction(u=>{
+      if(!u)return u;
+      u.coins=(u.coins==null?START_COINS:u.coins)+REF_BONUS;u.refCount=(u.refCount||0)+1;return u;
+    });
+    return true;
+  };
+  // Kunlik bonus (Toshkent vaqti bo'yicha kalendar kun)
+  window.fbClaimDaily=async function(key){
+    const day=Math.floor((window.fbNow()+5*3600000)/86400000);
+    let claimed=false;
+    const res=await db.ref('users/'+key).transaction(u=>{
+      claimed=false;
+      if(!u)return u;
+      if(u.lastBonusDay===day)return;
+      u.coins=(u.coins==null?START_COINS:u.coins)+DAILY;u.lastBonusDay=day;claimed=true;return u;
+    });
+    return {claimed:res.committed&&claimed,user:res.snapshot.val()};
   };
   window.fbCoins=async function(key){
     const s=await db.ref('users/'+key+'/coins').once('value');
@@ -354,7 +396,10 @@ const sq=(r,c)=>String.fromCharCode(97+c)+(8-r);
 const rc=s=>({r:8-Number(s[1]),c:s.charCodeAt(0)-97});
 
 let S=null;          // joriy o'yin holati
-let joinId=new URLSearchParams(location.search).get('room')||(tg&&tg.initDataUnsafe&&tg.initDataUnsafe.start_param)||null;
+const START_PARAM=new URLSearchParams(location.search).get('room')||(tg&&tg.initDataUnsafe&&tg.initDataUnsafe.start_param)||null;
+const REF=(START_PARAM&&/^ref_\d{1,15}$/.test(START_PARAM))?'tg_'+START_PARAM.slice(4):null;
+let joinId=(START_PARAM&&!START_PARAM.startsWith('ref_'))?START_PARAM:null;
+window.userReady=new Promise(res=>{window._userReadyRes=res;});
 let timer=null,botTimer=null;
 
 /* ---------- Lobby / navigatsiya ---------- */
@@ -381,15 +426,49 @@ $('game-cards').innerHTML=GAMES.map(([id,t,d,ic,hv,box])=>`
 const esc=t=>String(t==null?'':t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function myKey(){const u=tg&&tg.initDataUnsafe&&tg.initDataUnsafe.user;return u?'tg_'+u.id:(window.fbUid?'u_'+window.fbUid:null);}
 function myName(){const u=tg&&tg.initDataUnsafe&&tg.initDataUnsafe.user;return u?(u.first_name||'Oyinchi'):'Oyinchi';}
+function maybeCredit(inviter){
+  if(!inviter||inviter===myKey()||!window.IS_NEW||window.refDone||!window.fbCreditInviter)return;
+  window.refDone=true;
+  window.fbCreditInviter(inviter,myKey()).catch(e=>console.error(e));
+}
+function dailyDay(){return Math.floor(((window.fbNow?window.fbNow():Date.now())+5*3600000)/86400000);}
+function setDaily(u){
+  const btn=$('daily-btn');if(!btn)return;
+  const can=!u||u.lastBonusDay!==dailyDay();
+  btn.disabled=!can;
+  btn.innerText=can?'Olish':'Olindi ✓';
+  btn.classList.toggle('opacity-50',!can);
+  if(can)$('daily-sub').innerText="Har kuni +5 🪙 bepul";
+  else{
+    const now=(window.fbNow?window.fbNow():Date.now())+5*3600000;
+    const h=Math.max(1,Math.ceil(((dailyDay()+1)*86400000-now)/3600000));
+    $('daily-sub').innerText="Keyingi bonus "+h+" soatdan keyin";
+  }
+}
+window.claimDaily=async function(){
+  if(!window.fbClaimDaily)return;
+  const btn=$('daily-btn');btn.disabled=true;
+  try{
+    await window.authReady;
+    const r=await window.fbClaimDaily(myKey());
+    if(r.claimed){hap('success');showModal('Kunlik bonus',"+5 🪙 hisobingizga qo'shildi!\nErtaga yana keling.");}
+    setStats(r.user);
+  }catch(e){console.error(e);btn.disabled=false;}
+};
 function setStats(u){
   u=u||{};const w=u.wins||0,l=u.losses||0,g=u.games||0,r=u.rating||0;
-  $('hdr-coins').innerText=(u.coins==null?'—':u.coins);$('stat-wins').innerText=w;$('stat-losses').innerText=l;$('hdr-rating').innerText=r;
+  $('hdr-coins').innerText=(u.coins==null?'—':u.coins);setDaily(u);$('ref-count').innerText=(u.refCount||0)+" ta do'st · "+((u.refCount||0)*10)+" 🪙";$('stat-wins').innerText=w;$('stat-losses').innerText=l;$('hdr-rating').innerText=r;
   $('stat-games').innerText=g+' ta';$('stat-wr').innerText=g?Math.round(w*100/g)+'%':'0%';
   if(g&&window.fbRank)window.fbRank(r).then(n=>{$('stat-rank').innerText='#'+n;}).catch(()=>{});
   else $('stat-rank').innerText='—';
 }
 async function refreshStats(){
-  try{await window.authReady;const k=myKey();if(!k||!window.fbEnsureUser)return;setStats(await window.fbEnsureUser(k,myName()));}catch(e){console.error(e);}
+  try{
+    await window.authReady;const k=myKey();if(!k||!window.fbEnsureUser)return;
+    setStats(await window.fbEnsureUser(k,myName()));
+    if(REF)maybeCredit(REF);
+  }catch(e){console.error(e);}
+  finally{if(window._userReadyRes){window._userReadyRes();window._userReadyRes=null;}}
 }
 const EMPTY_LEADERS='<div class="text-center text-xs text-slate-400 p-6">Hali hech kim o\'ynamagan.<br>Onlayn o\'ynab, reytingga birinchi bo\'lib kiring!</div>';
 async function loadLeaders(){
@@ -469,7 +548,10 @@ const SUB_CHECK_URL='https://arena-sub.dilshodxudoyqulov08.workers.dev/';
 window.subOk=false;
 window.openChannel=function(){hap('light');tg&&tg.openTelegramLink?tg.openTelegramLink(CHANNEL_URL):window.open(CHANNEL_URL,'_blank');};
 function gateMsg(t){$('gate-msg').innerText=t;}
-function gateOpen(){window.subOk=true;$('gate').classList.add('hidden');refreshStats();}
+function gateOpen(){
+  window.subOk=true;$('gate').classList.add('hidden');refreshStats();
+  if(joinId&&!window.autoJoined){window.autoJoined=true;startMode('chess','friend');}
+}
 function subCached(){try{return localStorage.getItem('subVerified')==='1';}catch(e){return false;}}
 function subCache(v){try{v?localStorage.setItem('subVerified','1'):localStorage.removeItem('subVerified');}catch(e){}}
 let lastSubCheck=0;
@@ -573,6 +655,7 @@ window.startMode=async function(game,mode,opts){
         if(S!==me)return;
         if(!color){showModal('Xona topilmadi',"Xona mavjud emas yoki to'lgan.");return;}
         me.room=id;me.my=color;
+        await window.userReady;maybeCredit(window.lastHostKey);
       }else{
         me.room=await window.fbCreate(game,stateString(),key,myName());
         if(S!==me)return;
@@ -891,8 +974,10 @@ const BOT_USERNAME='arenashaxmat_bot'; // BotFather'dagi bot username
 const APP_NAME='arena';               // /newapp dagi short name
 window.shareLink=function(room){
   hap('medium');
-  const url='https://t.me/'+BOT_USERNAME+'/'+APP_NAME+(room?'?startapp='+room:'');
-  const text=room?"Kel, shashka/shahmat o'ynaymiz!":"Telegram Arena'da shahmat va shashka o'yna!";
+  const tu=tg&&tg.initDataUnsafe&&tg.initDataUnsafe.user;
+  const param=room||(tu?'ref_'+tu.id:'');
+  const url='https://t.me/'+BOT_USERNAME+'/'+APP_NAME+(param?'?startapp='+param:'');
+  const text=room?"Kel, shashka/shahmat o'ynaymiz!":"Telegram Arena'da shahmat va shashka o'yna! Kirishing bilan 50 🪙 olasan.";
   const link='https://t.me/share/url?url='+encodeURIComponent(url)+'&text='+encodeURIComponent(text);
   tg&&tg.openTelegramLink?tg.openTelegramLink(link):window.open(link,'_blank');
 };
