@@ -19,32 +19,28 @@ body{user-select:none;-webkit-user-select:none;touch-action:manipulation;backgro
 .glass-panel{background:rgba(21,28,44,.75);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.08)}
 .board-grid{display:grid;grid-template-columns:repeat(8,1fr);grid-template-rows:repeat(8,1fr);aspect-ratio:1/1}
 .square{display:flex;align-items:center;justify-content:center;position:relative;cursor:pointer}
-.square.light{background:#e2e8f0}.square.dark{background:#334155}
-.square.last{box-shadow:inset 0 0 0 100px rgba(59,130,246,.35)}
-.square.selected{background:#eab308!important;box-shadow:none}
-.square.move::after{content:'';width:30%;height:30%;background:rgba(34,197,94,.75);border-radius:50%;position:absolute}
-.pc{font-size:clamp(24px,9vw,40px);line-height:1;font-family:'Segoe UI Symbol','Noto Sans Symbols 2','Apple Symbols',sans-serif}
-.pc.w{color:#fff;text-shadow:0 0 2px #000,0 0 2px #000,0 1px 3px #000}
-.pc.b{color:#0f172a;text-shadow:0 0 2px #94a3b8,0 0 1px #94a3b8}
-.ck{width:78%;height:78%;border-radius:50%;position:relative;display:flex;align-items:center;justify-content:center;transition:transform .18s ease,box-shadow .18s ease;animation:ckpop .25s ease}
+.square.light{background:linear-gradient(135deg,#f4ead3,#e8dabd)}
+.square.dark{background:linear-gradient(135deg,#9b6c46,#82593a)}
+.square.last{box-shadow:inset 0 0 0 100px rgba(234,179,8,.28)}
+.square.selected{background:linear-gradient(135deg,#facc15,#d9a406)!important;box-shadow:inset 0 0 0 3px rgba(255,255,255,.45)!important}
+.square.move::after{content:'';width:30%;height:30%;background:rgba(43,26,12,.4);border-radius:50%;position:absolute;animation:ckpulse 1.4s ease-in-out infinite}
+.square.move.cap::after{width:84%;height:84%;background:transparent;border:3px solid rgba(168,42,30,.75);box-shadow:0 0 10px rgba(168,42,30,.4)}
+@keyframes ckpulse{0%,100%{transform:scale(.9);opacity:.8}50%{transform:scale(1.08);opacity:1}}
+div.board-frame{background:linear-gradient(145deg,#3d2616,#26150c);border:1px solid rgba(201,162,39,.45);box-shadow:0 24px 50px rgba(0,0,0,.55),inset 0 0 0 1px rgba(201,162,39,.12),inset 0 2px 6px rgba(255,220,160,.06)}
+#board{border:0;border-radius:8px;box-shadow:0 0 0 2px rgba(201,162,39,.55),0 8px 20px rgba(0,0,0,.5)}
+.pc{font-size:clamp(26px,9.5vw,42px);line-height:1;font-family:'Segoe UI Symbol','Noto Sans Symbols 2','Apple Symbols',serif;filter:drop-shadow(0 2px 2px rgba(30,15,5,.5));transition:transform .15s ease}
+.pc.w{color:#fffaf0;-webkit-text-stroke:1.2px #3a2616;text-shadow:0 1px 0 #3a2616}
+.pc.b{color:#1d1410;-webkit-text-stroke:.6px #7c5f45;text-shadow:0 1px 1px rgba(255,235,200,.25)}
+.square.sel-piece .pc,.square.sel-piece .ck{transform:translateY(-3px) scale(1.08)}
+.ck{width:78%;height:78%;border-radius:50%;position:relative;display:flex;align-items:center;justify-content:center;transition:transform .18s ease;animation:ckpop .25s ease}
 @keyframes ckpop{from{transform:scale(.7);opacity:.4}to{transform:scale(1);opacity:1}}
 .ck::before{content:'';position:absolute;inset:14%;border-radius:50%}
-.ck.w{background:radial-gradient(circle at 32% 28%,#fff 0%,#f1f5ff 38%,#c9d3ee 100%);box-shadow:0 7px 12px rgba(2,6,23,.55),0 2px 0 #aab6d8,inset 0 -4px 7px rgba(71,85,140,.28),inset 0 3px 5px rgba(255,255,255,.9)}
-.ck.w::before{border:2px solid rgba(100,116,170,.35);box-shadow:inset 0 2px 3px rgba(255,255,255,.7)}
-.ck.b{background:radial-gradient(circle at 32% 28%,#6b7694 0%,#2a3350 42%,#0a0e1c 100%);box-shadow:0 7px 12px rgba(2,6,23,.7),0 2px 0 #05070f,inset 0 -4px 7px rgba(0,0,0,.55),inset 0 3px 5px rgba(255,255,255,.22)}
-.ck.b::before{border:2px solid rgba(148,163,220,.28)}
-.ck.k::after{content:'';position:absolute;inset:26%;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23fbbf24' stroke='%23b45309' stroke-width='1' stroke-linejoin='round' d='M3 18.5h18v2.5H3zM3.5 7l4.5 4.2L12 4.5l4 6.7L20.5 7 18.5 17.5h-13z'/%3E%3C/svg%3E") center/contain no-repeat;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))}
-.ck.k{box-shadow:0 7px 12px rgba(2,6,23,.6),0 0 0 2px rgba(251,191,36,.75),0 0 14px rgba(251,191,36,.45),inset 0 -4px 7px rgba(0,0,0,.25),inset 0 3px 5px rgba(255,255,255,.4)}
-.square.sel-piece .ck{transform:translateY(-3px) scale(1.08)}
-div[data-game=checkers].board-frame{background:linear-gradient(145deg,#1b2342,#0f1529);border-color:#2f3b66;box-shadow:0 24px 50px rgba(79,70,229,.28),0 0 0 1px rgba(255,255,255,.05)}
-#board[data-game=checkers]{border:0;border-radius:14px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06),0 6px 18px rgba(0,0,0,.45)}
-#board[data-game=checkers] .square.light{background:linear-gradient(135deg,#eef1fb,#dbe2f4)}
-#board[data-game=checkers] .square.dark{background:linear-gradient(135deg,#4a5d94,#36467a)}
-#board[data-game=checkers] .square.last{box-shadow:inset 0 0 0 100px rgba(56,189,248,.28)}
-#board[data-game=checkers] .square.selected{background:linear-gradient(135deg,#22d3ee,#6366f1)!important;box-shadow:inset 0 0 0 3px rgba(255,255,255,.55)!important}
-#board[data-game=checkers] .square.move::after{width:32%;height:32%;background:radial-gradient(circle,#4ade80 0%,#22c55e 60%,rgba(34,197,94,.2) 100%);box-shadow:0 0 12px rgba(74,222,128,.75);animation:ckpulse 1.3s ease-in-out infinite}
-#board[data-game=checkers] .square.move.cap::after{background:radial-gradient(circle,#fb7185 0%,#f43f5e 60%,rgba(244,63,94,.2) 100%);box-shadow:0 0 14px rgba(251,113,133,.85)}
-@keyframes ckpulse{0%,100%{transform:scale(.85);opacity:.85}50%{transform:scale(1.1);opacity:1}}
+.ck.w{background:radial-gradient(circle at 34% 28%,#fffdf5 0%,#f1e6cb 52%,#cdb98f 100%);box-shadow:0 6px 10px rgba(30,15,5,.55),0 2px 0 #b59f72,inset 0 -3px 6px rgba(120,90,40,.3),inset 0 2px 4px rgba(255,255,255,.85)}
+.ck.w::before{border:2px solid rgba(120,90,50,.38);box-shadow:inset 0 2px 3px rgba(255,255,255,.6)}
+.ck.b{background:radial-gradient(circle at 34% 28%,#65503f 0%,#2b1e16 52%,#100906 100%);box-shadow:0 6px 10px rgba(20,8,2,.7),0 2px 0 #050302,inset 0 -3px 6px rgba(0,0,0,.55),inset 0 2px 4px rgba(255,220,170,.2)}
+.ck.b::before{border:2px solid rgba(255,220,170,.2)}
+.ck.k::after{content:'';position:absolute;inset:26%;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23fbbf24' stroke='%238a5a00' stroke-width='1' stroke-linejoin='round' d='M3 18.5h18v2.5H3zM3.5 7l4.5 4.2L12 4.5l4 6.7L20.5 7 18.5 17.5h-13z'/%3E%3C/svg%3E") center/contain no-repeat;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))}
+.ck.k{box-shadow:0 6px 10px rgba(30,15,5,.6),0 0 0 2px rgba(251,191,36,.8),0 0 12px rgba(251,191,36,.4),inset 0 -3px 6px rgba(0,0,0,.25),inset 0 2px 4px rgba(255,255,255,.4)}
 </style>
 </head>
 <body class="min-h-screen flex flex-col justify-between overflow-x-hidden font-sans pb-16">
@@ -67,7 +63,7 @@ div[data-game=checkers].board-frame{background:linear-gradient(145deg,#1b2342,#0
     <div id="user-avatar" class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-indigo-500 flex items-center justify-center font-bold text-white text-lg">U</div>
     <div>
       <h1 id="user-name" class="font-bold text-sm text-slate-100">Foydalanuvchi</h1>
-      <span class="text-xs text-brand-400 font-medium">Reyting: <span id="hdr-rating">0</span> ball</span>
+      <span class="text-xs text-brand-400 font-medium">Reyting: <span id="hdr-rating">0</span> ball · <span id="hdr-coins">—</span> 🪙</span>
     </div>
   </div>
   <div class="px-3 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-xs font-semibold flex items-center space-x-2">
@@ -81,6 +77,7 @@ div[data-game=checkers].board-frame{background:linear-gradient(145deg,#1b2342,#0
     <div class="text-center space-y-2">
       <h2 class="text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-300 to-purple-400">Telegram Arena</h2>
       <p class="text-xs text-slate-400">Sevimli o'yiningizni tanlang va do'stlar bilan onlayn o'ynang!</p>
+      <p class="text-[11px] text-amber-400/90">Onlayn o'yin: 5 🪙 tikiladi · g'alaba +10 · durang 0 · mag'lubiyat −5</p>
     </div>
     <div class="glass-panel p-4 rounded-2xl flex justify-around text-center">
       <div><div class="text-xs text-slate-400">G'alabalar</div><div id="stat-wins" class="text-lg font-bold text-emerald-400">0</div></div>
@@ -109,7 +106,7 @@ div[data-game=checkers].board-frame{background:linear-gradient(145deg,#1b2342,#0
       <div class="w-16 h-16 rounded-full bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400 text-3xl mx-auto"><i class="fa-solid fa-user-plus"></i></div>
       <div>
         <h3 class="font-bold text-base">Bonus tangalar yutib oling!</h3>
-        <p class="text-xs text-slate-400 mt-1">Do'stingizga havola yuboring va onlayn o'ynab, reytingda ko'tariling.</p>
+        <p class="text-xs text-slate-400 mt-1">Do'stingizga havola yuboring. Onlayn o'yinda g'alaba +10 🪙, durang 0, mag'lubiyat −5 🪙 (har o'yinga 5 🪙 tikiladi). Yangi o'yinchiga 50 🪙 beriladi.</p>
       </div>
       <button onclick="shareLink('')" class="w-full py-3 bg-gradient-to-r from-brand-600 to-indigo-600 text-white font-bold text-xs rounded-xl active:scale-95 transition-all"><i class="fa-solid fa-paper-plane"></i> Taklif havolasini yuborish</button>
     </div>
@@ -213,6 +210,7 @@ const FIREBASE_CONFIG={
       if(d===null)return d;                       // xona yo'q
       if(d.playerWhite===uid||d.playerBlack===uid)return d;
       if(d.playerBlack)return;                    // to'lgan: abort
+      if(d.stk&&Object.values(d.stk).includes('refunded'))return;
       d.playerBlack=uid;d.status='playing';return d;
     });
     const d=res.snapshot.val();
@@ -231,11 +229,44 @@ const FIREBASE_CONFIG={
   };
   window.fbUnlisten=()=>{if(off)off();};
 
+  const STAKE=5,WIN_PRIZE=10,START_COINS=50;
+  window.fbEnsureUser=async function(key,name){
+    const res=await db.ref('users/'+key).transaction(u=>{
+      u=u||{wins:0,losses:0,draws:0,rating:0,games:0};
+      if(u.coins==null)u.coins=START_COINS;
+      u.name=name;return u;
+    });
+    return res.snapshot.val();
+  };
+  window.fbCoins=async function(key){
+    const s=await db.ref('users/'+key+'/coins').once('value');
+    const v=s.val();return v==null?START_COINS:v;
+  };
+  window.fbStake=async function(room,key){
+    const m=await db.ref('rooms/'+room+'/stk/'+key).transaction(v=>v?undefined:true);
+    if(!m.committed)return 'already';
+    const r=await db.ref('users/'+key+'/coins').transaction(c=>{c=(c==null?START_COINS:c);return c>=STAKE?c-STAKE:undefined;});
+    if(!r.committed){await db.ref('rooms/'+room+'/stk/'+key).remove();return 'poor';}
+    return 'ok';
+  };
+  window.fbRefund=async function(room,key){
+    const rs=await ref(room).once('value');const d=rs.val();
+    if(!d||d.playerBlack)return false;
+    const m=await db.ref('rooms/'+room+'/stk/'+key).transaction(v=>v===true?'refunded':undefined);
+    if(!m.committed)return false;
+    await db.ref('users/'+key+'/coins').transaction(c=>(c==null?START_COINS:c)+STAKE);
+    return true;
+  };
+  window.fbResign=function(room,color){return ref(room).update({resigned:color});};
+
   window.fbRecord=async function(room,key,name,result){
     const rr=await db.ref('rooms/'+room+'/rec/'+key).transaction(v=>v?undefined:true);
     if(!rr.committed)return null;
+    const stk=(await db.ref('rooms/'+room+'/stk/'+key).once('value')).val();
+    const pay=stk===true?(result==='win'?STAKE+WIN_PRIZE:result==='draw'?STAKE:0):0;
     const res=await db.ref('users/'+key).transaction(u=>{
       u=u||{wins:0,losses:0,draws:0,rating:0,games:0};
+      u.coins=(u.coins==null?START_COINS:u.coins)+pay;
       u.name=name;u.games=(u.games||0)+1;
       if(result==='win'){u.wins=(u.wins||0)+1;u.rating=(u.rating||0)+25;}
       else if(result==='loss'){u.losses=(u.losses||0)+1;u.rating=Math.max(0,(u.rating||0)-10);}
@@ -303,13 +334,13 @@ function myKey(){const u=tg&&tg.initDataUnsafe&&tg.initDataUnsafe.user;return u?
 function myName(){const u=tg&&tg.initDataUnsafe&&tg.initDataUnsafe.user;return u?(u.first_name||'Oyinchi'):'Oyinchi';}
 function setStats(u){
   u=u||{};const w=u.wins||0,l=u.losses||0,g=u.games||0,r=u.rating||0;
-  $('stat-wins').innerText=w;$('stat-losses').innerText=l;$('hdr-rating').innerText=r;
+  $('hdr-coins').innerText=(u.coins==null?'—':u.coins);$('stat-wins').innerText=w;$('stat-losses').innerText=l;$('hdr-rating').innerText=r;
   $('stat-games').innerText=g+' ta';$('stat-wr').innerText=g?Math.round(w*100/g)+'%':'0%';
   if(g&&window.fbRank)window.fbRank(r).then(n=>{$('stat-rank').innerText='#'+n;}).catch(()=>{});
   else $('stat-rank').innerText='—';
 }
 async function refreshStats(){
-  try{await window.authReady;const k=myKey();if(!k||!window.fbUser)return;setStats(await window.fbUser(k));}catch(e){console.error(e);}
+  try{await window.authReady;const k=myKey();if(!k||!window.fbEnsureUser)return;setStats(await window.fbEnsureUser(k,myName()));}catch(e){console.error(e);}
 }
 const EMPTY_LEADERS='<div class="text-center text-xs text-slate-400 p-6">Hali hech kim o\'ynamagan.<br>Onlayn o\'ynab, reytingga birinchi bo\'lib kiring!</div>';
 async function loadLeaders(){
@@ -318,7 +349,7 @@ async function loadLeaders(){
   box.innerHTML='<div class="text-center text-xs text-slate-400 p-6">Yuklanmoqda...</div>';
   try{
     await window.authReady;
-    const list=(await window.fbTop(30)).filter(u=>(u.games||0)>0);
+    const list=(await window.fbTop(100)).filter(u=>(u.games||0)>0).slice(0,30);
     if(!list.length){box.innerHTML=EMPTY_LEADERS;return;}
     const me=myKey();
     const col=[['amber-400','text-slate-900'],['slate-300','text-slate-900'],['amber-700','text-white']];
@@ -395,6 +426,10 @@ $('modal-close-btn').addEventListener('click',()=>{$('modal').classList.add('hid
 
 /* ---------- O'yinni boshlash ---------- */
 function leaveRoom(){
+  if(S&&S.mode==='friend'&&S.room&&S.waiting&&S.staked&&!S.over&&window.fbRefund){
+    const k=myKey(),rm=S.room;S.staked=false;
+    window.fbRefund(rm,k).then(ok=>{if(ok)refreshStats();}).catch(()=>{});
+  }
   clearInterval(timer);timer=null;clearTimeout(botTimer);
   if(window.fbUnlisten)window.fbUnlisten();
 }
@@ -415,6 +450,10 @@ window.startMode=async function(game,mode){
     if(S!==me)return;
     if(!uid){showModal('Ulanish xatosi',"Onlayn rejim uchun serverga ulanib bo'lmadi.");return;}
     try{
+      const key=myKey();
+      const coins=await window.fbCoins(key);
+      if(S!==me)return;
+      if(coins<5){showModal('Tanga yetarli emas',"Onlayn o'yin uchun 5 🪙 kerak, sizda "+coins+" 🪙 bor. Bot yoki oflayn rejimda o'ynashingiz mumkin.");backToLobby();return;}
       if(joinId){
         const id=joinId;joinId=null;
         const color=await window.fbJoin(id);
@@ -426,16 +465,37 @@ window.startMode=async function(game,mode){
         if(S!==me)return;
         me.waiting=true;
       }
+      const st=await window.fbStake(me.room,key);
+      if(S!==me)return;
+      if(st==='poor'){showModal('Tanga yetarli emas',"Tikish uchun 5 🪙 yetmadi.");backToLobby();return;}
+      me.staked=true;refreshStats();
       window.fbListen(me.room,d=>onRoom(me,d));
     }catch(e){console.error(e);showModal('Xato',"Xona bilan ishlashda xatolik yuz berdi.");return;}
   }
   startTimer();render();
 };
 
-window.backToLobby=function(){hap('light');leaveRoom();S=null;switchTab('lobby');};
+function askConfirm(msg,cb){
+  if(tg&&tg.showConfirm&&tg.isVersionAtLeast&&tg.isVersionAtLeast('6.2'))tg.showConfirm(msg,ok=>{if(ok)cb();});
+  else if(confirm(msg))cb();
+}
+window.backToLobby=function(){
+  hap('light');
+  if(S&&S.mode==='friend'&&S.room&&!S.waiting&&!S.over&&S.staked){
+    askConfirm("O'yindan chiqsangiz, mag'lub hisoblanasiz (−5 🪙). Chiqasizmi?",()=>{
+      if(!S)return;
+      if(window.fbResign)window.fbResign(S.room,S.my).catch(()=>{});
+      finish(opp(S.my),"Siz taslim bo'ldingiz. ");
+      leaveRoom();S=null;switchTab('lobby');
+    });
+    return;
+  }
+  leaveRoom();S=null;switchTab('lobby');
+};
 
 window.resetGame=function(){
   if(!S)return;
+  if(S.mode==='friend'){backToLobby();return;}
   hap('medium');clearTimeout(botTimer);
   S.over=false;S.sel=null;S.moves=[];S.last=null;S.chain=null;S.turn='w';S.t={w:300,b:300};
   initEngine();
@@ -533,7 +593,9 @@ function finish(winner,why){
   if(!winner)m='Durang!';
   else if(S.mode==='pass')m=(winner==='w'?'Oq':'Qora')+" g'alaba qildi!";
   else m=winner===S.my?"Tabriklaymiz, siz g'alaba qozondingiz!":"Siz mag'lub bo'ldingiz.";
-  showModal("O'yin yakunlandi",why+m);
+  let coinTxt='';
+  if(S.mode==='friend'&&S.staked)coinTxt=!winner?"\nTanga qaytarildi (0 🪙)":winner===S.my?"\n+10 🪙 yutdingiz":"\n−5 🪙";
+  showModal("O'yin yakunlandi",why+m+coinTxt);
   if(S.mode==='friend'&&S.room&&!S.recorded&&window.fbRecord){
     S.recorded=true;
     const k=myKey(),res=!winner?'draw':(winner===S.my?'win':'loss');
@@ -659,6 +721,7 @@ function onRoom(me,d){
   if(d.gameType!==S.game){S.game=d.gameType;initEngine();}
   S.my=d.playerWhite===window.fbUid?'w':'b';
   S.waiting=d.status==='waiting';
+  if(d.resigned&&!S.over){finish(d.resigned==='w'?'b':'w',"Raqib taslim bo'ldi. ");return;}
   try{
     if(S.game==='chess'){if(d.gameState!==S.chess.fen())S.chess.load(d.gameState);S.turn=S.chess.turn();}
     else{const o=JSON.parse(d.gameState);S.B=o.b;S.chain=o.c;S.turn=d.turn;}
@@ -684,6 +747,7 @@ function render(){
     if(mv0){d.classList.add('move');if(mv0.jump)d.classList.add('cap');}
     if(S.game==='checkers'&&S.sel&&S.sel.r===r&&S.sel.c===c)d.classList.add('sel-piece');
     const p=pieceAt(r,c);
+    if(mv0&&p)d.classList.add('cap');
     if(p){
       const x=document.createElement('div');
       if(S.game==='chess'){x.className='pc '+p.color;x.textContent=GLYPH[p.type];}
