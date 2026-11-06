@@ -673,7 +673,7 @@ function think(fen,histFens,ms,maxDepth){
     if(iterBest)best=iterBest;
     bestScore=s;doneDepth=d;
     if(Math.abs(s)>MATE-100)break;
-    if(Date.now()-t0>ms*0.55)break;
+    if(Date.now()-t0>ms*0.7)break;
   }
   return toRes(best,bestScore,doneDepth);
 }
@@ -1525,6 +1525,7 @@ window.startMode=async function(game,mode,opts){
       window.fbChatListen(me.room,m=>{if(S===me)addChat(m);});
     }catch(e){console.error(e);showModal('Xato',"Xona bilan ishlashda xatolik yuz berdi.");return;}
   }
+  if(mode==='bot'&&game==='chess')sfInit().catch(()=>{});
   startTimer();render();
 };
 
@@ -1789,51 +1790,108 @@ function botSimple(){
 /* ---------- Kuchli bot (Web Worker ichida) ---------- */
 const workers={},syncInst={};let reqId=0;
 const engineSrc=id=>document.getElementById(id).textContent;
-function runEngine(kind,payload,timeout){
+function runWorker(kind,payload,timeout){
   return new Promise((resolve,reject)=>{
-    const id=++reqId;payload.id=id;
+    const id=++reqId;payload=Object.assign({},payload,{id:id});
     const srcId=kind==='chess'?'w-chess':'w-checkers';
     let w=workers[kind];
     if(w===undefined){
       try{w=workers[kind]=new Worker(URL.createObjectURL(new Blob([engineSrc(srcId)],{type:'text/javascript'})));}
       catch(e){w=workers[kind]=null;}
     }
-    if(w){
-      let to=null;
-      const cleanup=()=>{clearTimeout(to);w.removeEventListener('message',onm);w.removeEventListener('error',onerr);};
-      const onm=e=>{if(e.data.id!==id)return;cleanup();e.data.error?reject(new Error(e.data.error)):resolve(e.data.move);};
-      const onerr=()=>{cleanup();workers[kind]=undefined;reject(new Error('worker'));};
-      to=setTimeout(()=>{cleanup();workers[kind]=undefined;try{w.terminate();}catch(e){}reject(new Error('timeout'));},timeout||9000);
-      w.addEventListener('message',onm);w.addEventListener('error',onerr);
-      w.postMessage(payload);
-    }else{ // Worker ishlamasa, asosiy oqimda hisoblaymiz
-      setTimeout(()=>{
-        try{
-          const inst=syncInst[kind]||(syncInst[kind]=(()=>{const f={postMessage(){}};new Function('self',engineSrc(srcId))(f);return f;})());
-          let out;inst.postMessage=m=>{out=m;};inst.onmessage({data:payload});
-          if(out&&!out.error)resolve(out.move);else reject(new Error(out&&out.error||'engine'));
-        }catch(e){reject(e);}
-      },30);
-    }
+    if(!w)return reject(new Error('noworker'));
+    let to=null;
+    const cleanup=()=>{clearTimeout(to);w.removeEventListener('message',onm);w.removeEventListener('error',onerr);};
+    const onm=e=>{if(e.data.id!==id)return;cleanup();e.data.error?reject(new Error(e.data.error)):resolve(e.data.move);};
+    const onerr=()=>{cleanup();workers[kind]=undefined;reject(new Error('worker'));};
+    to=setTimeout(()=>{cleanup();workers[kind]=undefined;try{w.terminate();}catch(e){}reject(new Error('timeout'));},timeout||9000);
+    w.addEventListener('message',onm);w.addEventListener('error',onerr);
+    w.postMessage(payload);
   });
+}
+function runSync(kind,payload){
+  const srcId=kind==='chess'?'w-chess':'w-checkers';
+  return new Promise((resolve,reject)=>{
+    setTimeout(()=>{
+      try{
+        const inst=syncInst[kind]||(syncInst[kind]=(()=>{const f={postMessage(){}};new Function('self',engineSrc(srcId))(f);return f;})());
+        let out;inst.postMessage=m=>{out=m;};inst.onmessage({data:payload});
+        if(out&&!out.error)resolve(out.move);else reject(new Error(out&&out.error||'engine'));
+      }catch(e){reject(e);}
+    },30);
+  });
+}
+function runEngine(kind,payload,timeout){
+  return runWorker(kind,payload,timeout).catch(()=>runSync(kind,payload));
+}
+
+/* ---------- Stockfish (shahmat uchun eng kuchli daraja) ---------- */
+const SF_URL='https://cdnjs.cloudflare.com/ajax/libs/stockfish.js/10.0.2/stockfish.js';
+let sf=null,sfReady=null,sfFail=0;
+function sfInit(){
+  if(sfFail>=2)return Promise.reject(new Error('sf-disabled'));
+  if(sfReady)return sfReady;
+  sfReady=new Promise((resolve,reject)=>{
+    let t=null;
+    const fail=e=>{clearTimeout(t);sfFail++;try{sf&&sf.terminate();}catch(x){}sf=null;sfReady=null;reject(e);};
+    try{sf=new Worker(URL.createObjectURL(new Blob(["importScripts('"+SF_URL+"');"],{type:'text/javascript'})));}
+    catch(e){return fail(e);}
+    t=setTimeout(()=>fail(new Error('sf-load-timeout')),30000);
+    sf.onerror=()=>fail(new Error('sf-error'));
+    sf.onmessage=e=>{
+      const l=typeof e.data==='string'?e.data:'';
+      if(l==='uciok'){sf.postMessage('setoption name Hash value 16');sf.postMessage('isready');}
+      else if(l==='readyok'){clearTimeout(t);sf.onmessage=null;resolve();}
+    };
+    sf.postMessage('uci');
+  });
+  return sfReady;
+}
+function sfBest(startFen,uciMoves,ms){
+  return sfInit().then(()=>new Promise((resolve,reject)=>{
+    const w=sf;
+    const to=setTimeout(()=>{w.onmessage=null;try{w.terminate();}catch(e){}if(sf===w){sf=null;sfReady=null;}sfFail++;reject(new Error('sf-timeout'));},ms+8000);
+    w.onmessage=e=>{
+      const l=typeof e.data==='string'?e.data:'';
+      if(l.indexOf('bestmove')===0){clearTimeout(to);w.onmessage=null;resolve(l.split(' ')[1]);}
+    };
+    w.postMessage('position '+(startFen?'fen '+startFen:'startpos')+(uciMoves.length?' moves '+uciMoves.join(' '):''));
+    w.postMessage('go movetime '+ms);
+  }));
+}
+
+function playBotChess(me,from,to,promo){
+  if(S!==me||S.over)return true;
+  const g=S.chess,m=g.move({from:from,to:to,promotion:promo||'q'});
+  if(!m)return false;
+  S.turn=g.turn();
+  const a=rc(from),b=rc(to);S.last={fr:a.r,fc:a.c,tr:b.r,tc:b.c};
+  hap('medium');afterMove(false);
+  return true;
 }
 function botMove(){
   if(!S||S.over||S.turn===S.my||S.botBusy)return;
   const me=S;
   if(S.game==='chess'){
     me.botBusy=true;
-    let hist=[];
-    try{const t=new Chess();for(const san of S.chess.history()){hist.push(t.fen());t.move(san);}}catch(e){hist=[];}
-    runEngine('chess',{fen:S.chess.fen(),hist:hist,ms:2200,maxDepth:14},9000).then(r=>{
-      me.botBusy=false;
+    const g0=S.chess;
+    const uci=g0.history({verbose:true}).map(m=>m.from+m.to+(m.promotion||''));
+    let startFen=null;try{startFen=g0.header().FEN||null;}catch(e){}
+    const fen=g0.fen();
+    const tryPlay=(f,t,p)=>{me.botBusy=false;const ok=playBotChess(me,f,t,p);if(!ok)me.botBusy=true;return ok;};
+    const own=()=>{
+      let hist=[];
+      try{const t=new Chess();for(const san of g0.history()){hist.push(t.fen());t.move(san);}}catch(e){hist=[];}
+      return runEngine('chess',{fen:fen,hist:hist,ms:2500,maxDepth:16},12000).then(r=>{
+        if(S!==me||S.over)return;
+        if(!r||!tryPlay(r.from,r.to,r.promo))throw new Error('own');
+      });
+    };
+    sfBest(startFen,uci,2600).then(mv=>{
       if(S!==me||S.over)return;
-      if(!r)return botSimple();
-      const g=S.chess,m=g.move({from:r.from,to:r.to,promotion:r.promo||'q'});
-      if(!m)return botSimple();
-      S.turn=g.turn();
-      const a=rc(r.from),b=rc(r.to);S.last={fr:a.r,fc:a.c,tr:b.r,tc:b.c};
-      hap('medium');afterMove(false);
-    }).catch(()=>{me.botBusy=false;if(S===me&&!S.over)botSimple();});
+      if(!mv||mv==='(none)'||mv.length<4||!tryPlay(mv.slice(0,2),mv.slice(2,4),mv.slice(4,5)))throw new Error('sf-bad');
+    }).catch(()=>{if(S!==me||S.over)return;return own();})
+      .catch(()=>{me.botBusy=false;if(S===me&&!S.over)botSimple();});
   }else botCheckers();
 }
 function botStep(st){
@@ -1851,7 +1909,7 @@ function botCheckers(){
     me.botPlan=null;
   }
   me.botBusy=true;
-  runEngine('checkers',{board:S.B,side:S.turn,chain:S.chain,quiet:S.quiet||0,ms:1500,maxDepth:18},9000).then(r=>{
+  runEngine('checkers',{board:S.B,side:S.turn,chain:S.chain,quiet:S.quiet||0,ms:3000,maxDepth:20},14000).then(r=>{
     me.botBusy=false;
     if(S!==me||S.over)return;
     if(!r||!r.steps||!r.steps.length)return botSimple();
