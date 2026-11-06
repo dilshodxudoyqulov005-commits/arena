@@ -187,6 +187,824 @@ div.board-frame{background:linear-gradient(145deg,#3d2616,#26150c);border:1px so
   </div>
 </div>
 
+<script id="w-chess" type="text/plain">
+/* Shaxmat dvigateli (0x88, alpha-beta, TT, null-move, LMR, quiescence) - Web Worker ichida ishlaydi */
+(function(){
+'use strict';
+const P=1,N=2,B=3,R=4,Q=5,K=6;
+const VAL=[0,100,320,330,500,900,0];
+const F_CAP=1,F_EP=2,F_CASTLE=4,F_DP=8;
+const MATE=30000,INF=32000,MAXPLY=96;
+const KN=[-33,-31,-18,-14,14,18,31,33];
+const KG=[-17,-16,-15,-1,1,15,16,17];
+const BD=[-17,-15,15,17];
+const RD=[-16,-1,1,16];
+
+/* ---- Zobrist ---- */
+let seed=0x2F6E2B1|0;
+function rnd(){seed^=seed<<13;seed^=seed>>>17;seed^=seed<<5;return seed|0;}
+const ZP1=new Int32Array(16*128),ZP2=new Int32Array(16*128),ZC1=new Int32Array(16),ZC2=new Int32Array(16),ZE1=new Int32Array(8),ZE2=new Int32Array(8);
+for(let i=0;i<ZP1.length;i++){ZP1[i]=rnd();ZP2[i]=rnd();}
+for(let i=0;i<16;i++){ZC1[i]=rnd();ZC2[i]=rnd();}
+for(let i=0;i<8;i++){ZE1[i]=rnd();ZE2[i]=rnd();}
+const ZS1=rnd(),ZS2=rnd();
+
+/* ---- holat ---- */
+const bd=new Int8Array(128);
+let side=0,castle=0,ep=-1,half=0,h1=0,h2=0;
+const ksq=[4,116];
+const matNP=[0,0];
+let sp=0;
+const SZ=2048;
+const stCap=new Int8Array(SZ),stCastle=new Int8Array(SZ),stEp=new Int16Array(SZ),stHalf=new Int16Array(SZ);
+const hh1=new Int32Array(SZ),hh2=new Int32Array(SZ);
+const castleMask=new Int8Array(128).fill(15);
+castleMask[4]=12;castleMask[0]=13;castleMask[7]=14;castleMask[116]=3;castleMask[112]=7;castleMask[119]=11;
+
+function computeHash(){
+  h1=0;h2=0;
+  for(let s=0;s<128;s++){if(s&0x88){s+=7;continue;}const p=bd[s];if(p){h1^=ZP1[p*128+s];h2^=ZP2[p*128+s];}}
+  if(side){h1^=ZS1;h2^=ZS2;}
+  h1^=ZC1[castle];h2^=ZC2[castle];
+  if(ep!==-1){h1^=ZE1[ep&7];h2^=ZE2[ep&7];}
+}
+function loadFen(fen){
+  bd.fill(0);
+  const parts=fen.trim().split(/\s+/);
+  const rows=parts[0].split('/');
+  const map={p:1,n:2,b:3,r:4,q:5,k:6};
+  matNP[0]=0;matNP[1]=0;
+  for(let r=0;r<8;r++){
+    let f=0;const row=rows[7-r];
+    for(const ch of row){
+      if(ch>='1'&&ch<='8'){f+=+ch;continue;}
+      const low=ch.toLowerCase(),col=(ch===low)?1:0,t=map[low];
+      const sq=r*16+f;bd[sq]=t|(col<<3);
+      if(t===6)ksq[col]=sq;
+      else if(t>1)matNP[col]+=VAL[t];
+      f++;
+    }
+  }
+  side=parts[1]==='b'?1:0;
+  castle=0;const c=parts[2]||'-';
+  if(c.includes('K'))castle|=1;if(c.includes('Q'))castle|=2;if(c.includes('k'))castle|=4;if(c.includes('q'))castle|=8;
+  ep=-1;if(parts[3]&&parts[3]!=='-'){ep=(parts[3].charCodeAt(0)-97)+(parseInt(parts[3][1])-1)*16;}
+  half=parseInt(parts[4]||'0')||0;
+  computeHash();
+}
+
+/* ---- hujumlar ---- */
+function attacked(sq,by){
+  let s;
+  if(by===0){
+    s=sq-15;if(!(s&0x88)&&bd[s]===P)return true;
+    s=sq-17;if(!(s&0x88)&&bd[s]===P)return true;
+  }else{
+    s=sq+15;if(!(s&0x88)&&bd[s]===(P|8))return true;
+    s=sq+17;if(!(s&0x88)&&bd[s]===(P|8))return true;
+  }
+  const kn=N|(by<<3),kg=K|(by<<3),bi=B|(by<<3),ro=R|(by<<3),qu=Q|(by<<3);
+  for(let i=0;i<8;i++){s=sq+KN[i];if(!(s&0x88)&&bd[s]===kn)return true;}
+  for(let i=0;i<8;i++){s=sq+KG[i];if(!(s&0x88)&&bd[s]===kg)return true;}
+  for(let i=0;i<4;i++){
+    const d=BD[i];s=sq+d;
+    while(!(s&0x88)){const p=bd[s];if(p){if(p===bi||p===qu)return true;break;}s+=d;}
+  }
+  for(let i=0;i<4;i++){
+    const d=RD[i];s=sq+d;
+    while(!(s&0x88)){const p=bd[s];if(p){if(p===ro||p===qu)return true;break;}s+=d;}
+  }
+  return false;
+}
+
+/* ---- yurishlar generatsiyasi ---- */
+const mv=(f,t,pr,fl)=>f|(t<<7)|(pr<<14)|(fl<<18);
+function gen(ml,caps){
+  let n=0;const us=side,en=us^1;
+  const dir=us===0?16:-16,start=us===0?1:6,prank=us===0?6:1;
+  for(let sq=0;sq<128;sq++){
+    if(sq&0x88){sq+=7;continue;}
+    const p=bd[sq];if(!p||(p>>3)!==us)continue;
+    const t=p&7;
+    if(t===P){
+      const to=sq+dir;
+      if(!(to&0x88)&&bd[to]===0){
+        if((sq>>4)===prank){
+          ml[n++]=mv(sq,to,Q,0);
+          if(!caps){ml[n++]=mv(sq,to,R,0);ml[n++]=mv(sq,to,B,0);ml[n++]=mv(sq,to,N,0);}
+        }else if(!caps){
+          ml[n++]=mv(sq,to,0,0);
+          if((sq>>4)===start&&bd[to+dir]===0)ml[n++]=mv(sq,to+dir,0,F_DP);
+        }
+      }
+      for(let k=-1;k<=1;k+=2){
+        const t2=sq+dir+k;if(t2&0x88)continue;
+        const cp=bd[t2];
+        if(cp&&(cp>>3)===en){
+          if((sq>>4)===prank){
+            ml[n++]=mv(sq,t2,Q,F_CAP);
+            if(!caps){ml[n++]=mv(sq,t2,R,F_CAP);ml[n++]=mv(sq,t2,B,F_CAP);ml[n++]=mv(sq,t2,N,F_CAP);}
+          }else ml[n++]=mv(sq,t2,0,F_CAP);
+        }else if(t2===ep){ml[n++]=mv(sq,t2,0,F_CAP|F_EP);}
+      }
+    }else if(t===N||t===K){
+      const offs=t===N?KN:KG;
+      for(let i=0;i<8;i++){
+        const to=sq+offs[i];if(to&0x88)continue;
+        const cp=bd[to];
+        if(cp===0){if(!caps)ml[n++]=mv(sq,to,0,0);}
+        else if((cp>>3)===en)ml[n++]=mv(sq,to,0,F_CAP);
+      }
+    }else{
+      const dirs=t===B?BD:t===R?RD:KG;
+      for(let i=0;i<dirs.length;i++){
+        if(t===Q||true){}
+        const d=dirs[i];let to=sq+d;
+        while(!(to&0x88)){
+          const cp=bd[to];
+          if(cp===0){if(!caps)ml[n++]=mv(sq,to,0,0);}
+          else{if((cp>>3)===en)ml[n++]=mv(sq,to,0,F_CAP);break;}
+          to+=d;
+        }
+      }
+    }
+  }
+  if(!caps){
+    if(us===0){
+      if((castle&1)&&bd[5]===0&&bd[6]===0&&bd[7]===R&&!attacked(4,1)&&!attacked(5,1)&&!attacked(6,1))ml[n++]=mv(4,6,0,F_CASTLE);
+      if((castle&2)&&bd[1]===0&&bd[2]===0&&bd[3]===0&&bd[0]===R&&!attacked(4,1)&&!attacked(3,1)&&!attacked(2,1))ml[n++]=mv(4,2,0,F_CASTLE);
+    }else{
+      if((castle&4)&&bd[117]===0&&bd[118]===0&&bd[119]===(R|8)&&!attacked(116,0)&&!attacked(117,0)&&!attacked(118,0))ml[n++]=mv(116,118,0,F_CASTLE);
+      if((castle&8)&&bd[113]===0&&bd[114]===0&&bd[115]===0&&bd[112]===(R|8)&&!attacked(116,0)&&!attacked(115,0)&&!attacked(114,0))ml[n++]=mv(116,114,0,F_CASTLE);
+    }
+  }
+  return n;
+}
+
+/* ---- yurish / qaytarish ---- */
+function make(m){
+  const from=m&127,to=(m>>7)&127,promo=(m>>14)&7,fl=(m>>18)&15;
+  const p=bd[from],us=side,en=us^1;
+  hh1[sp]=h1;hh2[sp]=h2;stCastle[sp]=castle;stEp[sp]=ep;stHalf[sp]=half;
+  let cap=bd[to];
+  h1^=ZP1[p*128+from];h2^=ZP2[p*128+from];
+  if(fl&F_EP){
+    const cs=to+(us===0?-16:16);cap=bd[cs];bd[cs]=0;
+    h1^=ZP1[cap*128+cs];h2^=ZP2[cap*128+cs];
+  }else if(cap){
+    h1^=ZP1[cap*128+to];h2^=ZP2[cap*128+to];
+    if((cap&7)>1&&(cap&7)<6)matNP[en]-=VAL[cap&7];
+  }
+  stCap[sp]=cap;
+  bd[from]=0;
+  const np=promo?(promo|(us<<3)):p;
+  bd[to]=np;
+  h1^=ZP1[np*128+to];h2^=ZP2[np*128+to];
+  if(promo)matNP[us]+=VAL[promo];
+  if(fl&F_CASTLE){
+    let rf,rt;
+    if(to===6){rf=7;rt=5;}else if(to===2){rf=0;rt=3;}else if(to===118){rf=119;rt=117;}else{rf=112;rt=115;}
+    const rp=bd[rf];bd[rf]=0;bd[rt]=rp;
+    h1^=ZP1[rp*128+rf]^ZP1[rp*128+rt];h2^=ZP2[rp*128+rf]^ZP2[rp*128+rt];
+  }
+  if((p&7)===K)ksq[us]=to;
+  if(ep!==-1){h1^=ZE1[ep&7];h2^=ZE2[ep&7];}
+  ep=-1;
+  if(fl&F_DP){ep=(from+to)>>1;h1^=ZE1[ep&7];h2^=ZE2[ep&7];}
+  const nc=castle&castleMask[from]&castleMask[to];
+  h1^=ZC1[castle]^ZC1[nc];h2^=ZC2[castle]^ZC2[nc];castle=nc;
+  half=((p&7)===P||cap)?0:half+1;
+  side=en;h1^=ZS1;h2^=ZS2;
+  sp++;
+}
+function unmake(m){
+  sp--;
+  const from=m&127,to=(m>>7)&127,promo=(m>>14)&7,fl=(m>>18)&15;
+  side^=1;const us=side,en=us^1;
+  const cap=stCap[sp];
+  const p=promo?(P|(us<<3)):bd[to];
+  if(promo)matNP[us]-=VAL[promo];
+  bd[from]=p;
+  if(fl&F_EP){bd[to]=0;bd[to+(us===0?-16:16)]=cap;}
+  else{
+    bd[to]=cap;
+    if(cap&&(cap&7)>1&&(cap&7)<6)matNP[en]+=VAL[cap&7];
+  }
+  if(fl&F_CASTLE){
+    let rf,rt;
+    if(to===6){rf=7;rt=5;}else if(to===2){rf=0;rt=3;}else if(to===118){rf=119;rt=117;}else{rf=112;rt=115;}
+    bd[rf]=bd[rt];bd[rt]=0;
+  }
+  if((p&7)===K)ksq[us]=from;
+  castle=stCastle[sp];ep=stEp[sp];half=stHalf[sp];h1=hh1[sp];h2=hh2[sp];
+}
+function makeNull(){
+  hh1[sp]=h1;hh2[sp]=h2;stCastle[sp]=castle;stEp[sp]=ep;stHalf[sp]=half;
+  if(ep!==-1){h1^=ZE1[ep&7];h2^=ZE2[ep&7];}
+  ep=-1;side^=1;h1^=ZS1;h2^=ZS2;half++;sp++;
+}
+function unmakeNull(){
+  sp--;side^=1;castle=stCastle[sp];ep=stEp[sp];half=stHalf[sp];h1=hh1[sp];h2=hh2[sp];
+}
+
+/* ---- baholash ---- */
+const PST=[null,
+[0,0,0,0,0,0,0,0,50,50,50,50,50,50,50,50,10,10,20,30,30,20,10,10,5,5,10,25,25,10,5,5,0,0,0,20,20,0,0,0,5,-5,-10,0,0,-10,-5,5,5,10,10,-20,-20,10,10,5,0,0,0,0,0,0,0,0],
+[-50,-40,-30,-30,-30,-30,-40,-50,-40,-20,0,0,0,0,-20,-40,-30,0,10,15,15,10,0,-30,-30,5,15,20,20,15,5,-30,-30,0,15,20,20,15,0,-30,-30,5,10,15,15,10,5,-30,-40,-20,0,5,5,0,-20,-40,-50,-40,-30,-30,-30,-30,-40,-50],
+[-20,-10,-10,-10,-10,-10,-10,-20,-10,0,0,0,0,0,0,-10,-10,0,5,10,10,5,0,-10,-10,5,5,10,10,5,5,-10,-10,0,10,10,10,10,0,-10,-10,10,10,10,10,10,10,-10,-10,5,0,0,0,0,5,-10,-20,-10,-10,-10,-10,-10,-10,-20],
+[0,0,0,0,0,0,0,0,5,10,10,10,10,10,10,5,-5,0,0,0,0,0,0,-5,-5,0,0,0,0,0,0,-5,-5,0,0,0,0,0,0,-5,-5,0,0,0,0,0,0,-5,-5,0,0,0,0,0,0,-5,0,0,0,5,5,0,0,0],
+[-20,-10,-10,-5,-5,-10,-10,-20,-10,0,0,0,0,0,0,-10,-10,0,5,5,5,5,0,-10,-5,0,5,5,5,5,0,-5,0,0,5,5,5,5,0,-5,-10,5,5,5,5,5,0,-10,-10,0,5,0,0,0,0,-10,-20,-10,-10,-5,-5,-10,-10,-20],
+[-30,-40,-40,-50,-50,-40,-40,-30,-30,-40,-40,-50,-50,-40,-40,-30,-30,-40,-40,-50,-50,-40,-40,-30,-30,-40,-40,-50,-50,-40,-40,-30,-20,-30,-30,-40,-40,-30,-30,-20,-10,-20,-20,-20,-20,-20,-20,-10,20,20,0,0,0,0,20,20,20,30,10,0,0,10,30,20]
+];
+const KEG=[-50,-40,-30,-20,-20,-30,-40,-50,-30,-20,-10,0,0,-10,-20,-30,-30,-10,20,30,30,20,-10,-30,-30,-10,30,40,40,30,-10,-30,-30,-10,30,40,40,30,-10,-30,-30,-10,20,30,30,20,-10,-30,-30,-30,0,0,0,0,-30,-30,-50,-30,-30,-30,-30,-30,-30,-50];
+const PASS=[0,10,15,25,45,80,130,0];
+const PHW=[0,0,1,1,2,4,0];
+const pcnt=[new Int8Array(8),new Int8Array(8)],pmaxW=new Int8Array(8),pminB=new Int8Array(8),pmaxB=new Int8Array(8),pminW=new Int8Array(8);
+
+function evaluate(){
+  let mg=0,eg=0,phase=0,bishops0=0,bishops1=0;
+  pcnt[0].fill(0);pcnt[1].fill(0);
+  pminW.fill(8);pmaxB.fill(-1);   // oq: eng past pastda; qora: eng yuqori
+  pmaxW.fill(-1);pminB.fill(8);
+  // 1-o'tish: material va PST, piyoda tuzilishi uchun ma'lumot
+  for(let sq=0;sq<128;sq++){
+    if(sq&0x88){sq+=7;continue;}
+    const p=bd[sq];if(!p)continue;
+    const t=p&7,col=p>>3,r=sq>>4,f=sq&7;
+    const idx=col===0?(7-r)*8+f:r*8+f;
+    let sm,se;
+    if(t===K){sm=PST[6][idx];se=KEG[idx];}
+    else{sm=se=VAL[t]+PST[t][idx];}
+    if(t===K){sm+=0;}
+    phase+=PHW[t];
+    if(col===0){mg+=sm;eg+=se;if(t===B)bishops0++;}
+    else{mg-=sm;eg-=se;if(t===B)bishops1++;}
+    if(t===P){
+      pcnt[col][f]++;
+      if(col===0){if(r>pmaxW[f])pmaxW[f]=r;if(r<pminW[f])pminW[f]=r;}
+      else{if(r>pmaxB[f])pmaxB[f]=r;if(r<pminB[f])pminB[f]=r;}
+    }
+  }
+  // 2-o'tish: piyoda tuzilishi, rook, shoh himoyasi
+  for(let f=0;f<8;f++){
+    const w=pcnt[0][f],b=pcnt[1][f];
+    if(w>1){mg-=12*(w-1);eg-=14*(w-1);}
+    if(b>1){mg+=12*(b-1);eg+=14*(b-1);}
+    const wl=f>0?pcnt[0][f-1]:0,wr=f<7?pcnt[0][f+1]:0,bl=f>0?pcnt[1][f-1]:0,br=f<7?pcnt[1][f+1]:0;
+    if(w&&!wl&&!wr){mg-=12;eg-=14;}
+    if(b&&!bl&&!br){mg+=12;eg+=14;}
+    if(w){ // oq o'tuvchi piyoda (eng orqadagi piyoda ham tekshirilsin)
+      const r=pmaxW[f];
+      let blocked=false;
+      for(let g=f-1;g<=f+1;g++){if(g<0||g>7)continue;if(pcnt[1][g]&&pmaxB[g]>r){blocked=true;break;}}
+      if(!blocked){mg+=PASS[r]>>1;eg+=PASS[r];}
+    }
+    if(b){
+      const r=pminB[f];
+      let blocked=false;
+      for(let g=f-1;g<=f+1;g++){if(g<0||g>7)continue;if(pcnt[0][g]&&pminW[g]<r){blocked=true;break;}}
+      if(!blocked){const rr=7-r;mg-=PASS[rr]>>1;eg-=PASS[rr];}
+    }
+  }
+  if(bishops0>=2){mg+=35;eg+=45;}
+  if(bishops1>=2){mg-=35;eg-=45;}
+  // rook: ochiq / yarim ochiq ustun
+  for(let sq=0;sq<128;sq++){
+    if(sq&0x88){sq+=7;continue;}
+    const p=bd[sq];if((p&7)!==R)continue;
+    const col=p>>3,f=sq&7;
+    const own=pcnt[col][f],opp=pcnt[col^1][f];
+    let b=0;if(!own){b=opp?10:20;}
+    if(col===0){mg+=b;eg+=b;}else{mg-=b;eg-=b;}
+  }
+  // shoh himoyasi (faqat o'rta o'yinda)
+  for(let col=0;col<2;col++){
+    const ks=ksq[col],kr=ks>>4,kf=ks&7;
+    if(col===0?kr>1:kr<6)continue;
+    const dir=col===0?16:-16;let sh=0;
+    for(let df=-1;df<=1;df++){
+      const s1=ks+dir+df;if(s1&0x88)continue;
+      if(bd[s1]===(P|(col<<3)))sh+=10;
+      else{const s2=s1+dir;if(!(s2&0x88)&&bd[s2]===(P|(col<<3)))sh+=5;}
+    }
+    if(col===0)mg+=sh;else mg-=sh;
+  }
+  if(phase>24)phase=24;
+  const sc=((mg*phase+eg*(24-phase))/24)|0;
+  return (side===0?sc:-sc)+8;
+}
+
+/* ---- qidiruv ---- */
+const TTB=19,TTN=1<<TTB,TTM=TTN-1;
+const ttK1=new Int32Array(TTN),ttK2=new Int32Array(TTN),ttMove=new Int32Array(TTN),ttScore=new Int16Array(TTN),ttDepth=new Int8Array(TTN),ttFlag=new Int8Array(TTN);
+const killers=new Int32Array(MAXPLY*2);
+const hist=new Int32Array(2*128*128);
+const mlist=[],mscore=[];
+for(let i=0;i<MAXPLY+4;i++){mlist.push(new Int32Array(256));mscore.push(new Int32Array(256));}
+let nodes=0,stopped=false,deadline=0,iterBest=0,rootBest=0;
+
+function isRep(){
+  const lim=Math.max(0,sp-half);
+  for(let i=sp-2;i>=lim;i-=2){if(hh1[i]===h1&&hh2[i]===h2)return true;}
+  return false;
+}
+function scoreMoves(ml,sc,n,ply,ttm){
+  for(let i=0;i<n;i++){
+    const m=ml[i],from=m&127,to=(m>>7)&127,promo=(m>>14)&7,fl=(m>>18)&15;
+    let s=0;
+    if(m===ttm)s=2000000;
+    else if(fl&F_CAP){
+      const victim=(fl&F_EP)?P:(bd[to]&7);
+      s=1000000+victim*16-(bd[from]&7)+(promo?500:0);
+    }else if(promo)s=900000+promo;
+    else if(m===killers[ply*2])s=800000;
+    else if(m===killers[ply*2+1])s=790000;
+    else s=hist[(side*128+from)*128+to];
+    sc[i]=s;
+  }
+}
+function pick(ml,sc,n,i){
+  let b=i;for(let j=i+1;j<n;j++)if(sc[j]>sc[b])b=j;
+  if(b!==i){const tm=ml[i];ml[i]=ml[b];ml[b]=tm;const ts=sc[i];sc[i]=sc[b];sc[b]=ts;}
+}
+function qsearch(alpha,beta,ply){
+  if((nodes++&1023)===0&&Date.now()>deadline)stopped=true;
+  if(stopped)return 0;
+  const stand=evaluate();
+  if(ply>=MAXPLY-1)return stand;
+  if(stand>=beta)return stand;
+  if(stand>alpha)alpha=stand;
+  const ml=mlist[ply],sc=mscore[ply];
+  const n=gen(ml,true);
+  scoreMoves(ml,sc,n,ply,0);
+  for(let i=0;i<n;i++){
+    pick(ml,sc,n,i);
+    const m=ml[i],fl=(m>>18)&15,promo=(m>>14)&7,to=(m>>7)&127;
+    const victim=(fl&F_EP)?P:(bd[to]&7);
+    if(!promo&&stand+VAL[victim]+200<alpha)continue;
+    const us=side;
+    make(m);
+    if(attacked(ksq[us],us^1)){unmake(m);continue;}
+    const s=-qsearch(-beta,-alpha,ply+1);
+    unmake(m);
+    if(stopped)return 0;
+    if(s>=beta)return s;
+    if(s>alpha)alpha=s;
+  }
+  return alpha;
+}
+function negamax(depth,alpha,beta,ply,nullOk){
+  if((nodes++&1023)===0&&Date.now()>deadline)stopped=true;
+  if(stopped)return 0;
+  const pv=beta-alpha>1;
+  if(ply>0&&(half>=100||isRep()))return 0;
+  const inCheck=attacked(ksq[side],side^1);
+  if(inCheck)depth++;
+  if(depth<=0)return qsearch(alpha,beta,ply);
+  if(ply>=MAXPLY-2)return evaluate();
+  const idx=h1&TTM;let ttm=0;
+  if(ttK1[idx]===h1&&ttK2[idx]===h2){
+    ttm=ttMove[idx];
+    if(ply>0&&ttDepth[idx]>=depth&&!pv){
+      let s=ttScore[idx];
+      if(s>MATE-200)s-=ply;else if(s<-MATE+200)s+=ply;
+      const f=ttFlag[idx];
+      if(f===0)return s;
+      if(f===1&&s>=beta)return s;
+      if(f===2&&s<=alpha)return s;
+    }
+  }
+  if(nullOk&&!pv&&!inCheck&&depth>=3&&matNP[side]>0){
+    if(evaluate()>=beta){
+      makeNull();
+      const s=-negamax(depth-1-(depth>6?3:2),-beta,-beta+1,ply+1,false);
+      unmakeNull();
+      if(stopped)return 0;
+      if(s>=beta)return s>=MATE-200?beta:s;
+    }
+  }
+  const ml=mlist[ply],sc=mscore[ply];
+  const n=gen(ml,false);
+  scoreMoves(ml,sc,n,ply,ttm);
+  const alpha0=alpha;let best=-INF,bestMove=0,legal=0;
+  for(let i=0;i<n;i++){
+    pick(ml,sc,n,i);
+    const m=ml[i],from=m&127,to=(m>>7)&127,fl=(m>>18)&15,promo=(m>>14)&7;
+    const us=side;
+    make(m);
+    if(attacked(ksq[us],us^1)){unmake(m);continue;}
+    legal++;
+    const quiet=!(fl&F_CAP)&&!promo;
+    let s;
+    if(legal===1)s=-negamax(depth-1,-beta,-alpha,ply+1,true);
+    else{
+      let red=0;
+      if(depth>=3&&!inCheck&&quiet&&legal>4)red=1+((legal>9&&depth>5)?1:0);
+      s=-negamax(depth-1-red,-alpha-1,-alpha,ply+1,true);
+      if(s>alpha&&red>0)s=-negamax(depth-1,-alpha-1,-alpha,ply+1,true);
+      if(s>alpha&&s<beta)s=-negamax(depth-1,-beta,-alpha,ply+1,true);
+    }
+    unmake(m);
+    if(stopped)return 0;
+    if(s>best){best=s;bestMove=m;}
+    if(s>alpha){
+      alpha=s;
+      if(ply===0)iterBest=m;
+      if(alpha>=beta){
+        if(quiet){
+          if(killers[ply*2]!==m){killers[ply*2+1]=killers[ply*2];killers[ply*2]=m;}
+          hist[(us*128+from)*128+to]+=depth*depth;
+          if(hist[(us*128+from)*128+to]>700000)for(let k=0;k<hist.length;k++)hist[k]>>=1;
+        }
+        break;
+      }
+    }
+  }
+  if(legal===0)return inCheck?-MATE+ply:0;
+  let flag=0;
+  if(best<=alpha0)flag=2;else if(best>=beta)flag=1;
+  let ss=best;
+  if(ss>MATE-200)ss+=ply;else if(ss<-MATE+200)ss-=ply;
+  if(ttDepth[idx]<=depth||ttK1[idx]!==h1){
+    ttK1[idx]=h1;ttK2[idx]=h2;ttMove[idx]=bestMove;ttScore[idx]=ss;ttDepth[idx]=depth;ttFlag[idx]=flag;
+  }
+  return best;
+}
+
+function sqName(s){return String.fromCharCode(97+(s&7))+((s>>4)+1);}
+const PCH=['','','n','b','r','q'];
+function legalMoves(){
+  const ml=new Int32Array(256),n=gen(ml,false),out=[];
+  for(let i=0;i<n;i++){const us=side;make(ml[i]);const ok=!attacked(ksq[us],us^1);unmake(ml[i]);if(ok)out.push(ml[i]);}
+  return out;
+}
+function think(fen,histFens,ms,maxDepth){
+  // o'yin tarixi (takrorlanishni aniqlash uchun)
+  sp=0;
+  for(const f of histFens||[]){loadFen(f);hh1[sp]=h1;hh2[sp]=h2;sp++;}
+  loadFen(fen);
+  const lm=legalMoves();
+  if(!lm.length)return null;
+  const toRes=(m,sc,d)=>({from:sqName(m&127),to:sqName((m>>7)&127),promo:PCH[(m>>14)&7]||'',score:sc,depth:d,nodes:nodes});
+  nodes=0;
+  if(lm.length===1)return toRes(lm[0],0,0);
+  // ochilish kitobi (xilma-xillik uchun)
+  const start='rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+  if(fen===start){
+    const o=['e2e4','d2d4','g1f3','c2c4'][Math.floor(Math.random()*4)];
+    const m=lm.find(x=>sqName(x&127)+sqName((x>>7)&127)===o);if(m)return toRes(m,0,0);
+  }
+  if(fen.startsWith('rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b')){
+    const o=['e7e5','c7c5','e7e6','c7c6'][Math.floor(Math.random()*4)];
+    const m=lm.find(x=>sqName(x&127)+sqName((x>>7)&127)===o);if(m)return toRes(m,0,0);
+  }
+  if(fen.startsWith('rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b')){
+    const o=['d7d5','g8f6'][Math.floor(Math.random()*2)];
+    const m=lm.find(x=>sqName(x&127)+sqName((x>>7)&127)===o);if(m)return toRes(m,0,0);
+  }
+  const t0=Date.now();deadline=t0+ms;stopped=false;
+  killers.fill(0);
+  for(let k=0;k<hist.length;k++)hist[k]>>=2;
+  let best=lm[0],bestScore=0,doneDepth=0;
+  for(let d=1;d<=maxDepth;d++){
+    iterBest=0;
+    const s=negamax(d,-INF,INF,0,false);
+    if(stopped){if(iterBest)best=iterBest;break;}
+    if(iterBest)best=iterBest;
+    bestScore=s;doneDepth=d;
+    if(Math.abs(s)>MATE-100)break;
+    if(Date.now()-t0>ms*0.55)break;
+  }
+  return toRes(best,bestScore,doneDepth);
+}
+function perft(d){
+  if(d===0)return 1;
+  const ml=new Int32Array(256),n=gen(ml,false);let c=0;
+  for(let i=0;i<n;i++){const us=side;make(ml[i]);if(!attacked(ksq[us],us^1))c+=perft(d-1);unmake(ml[i]);}
+  return c;
+}
+
+function hashCheck(d){
+  if(d===0)return true;
+  const ml=new Int32Array(256),n=gen(ml,false);
+  for(let i=0;i<n;i++){
+    const us=side;const a1=h1,a2=h2;
+    make(ml[i]);
+    if(!attacked(ksq[us],us^1)){
+      const b1=h1,b2=h2;computeHash();
+      if(b1!==h1||b2!==h2)return false;
+      if(!hashCheck(d-1))return false;
+    }
+    unmake(ml[i]);
+    if(h1!==a1||h2!==a2)return false;
+  }
+  return true;
+}
+function toFenStr(){
+  const ch=['','p','n','b','r','q','k'];let out='';
+  for(let r=7;r>=0;r--){let e=0;for(let f=0;f<8;f++){const p=bd[r*16+f];if(!p){e++;continue;}if(e){out+=e;e=0;}const c=ch[p&7];out+=(p>>3)?c:c.toUpperCase();}if(e)out+=e;if(r)out+='/';}
+  let c='';if(castle&1)c+='K';if(castle&2)c+='Q';if(castle&4)c+='k';if(castle&8)c+='q';
+  return out+' '+(side?'b':'w')+' '+(c||'-')+' '+(ep===-1?'-':sqName(ep))+' '+half+' 1';
+}
+self.__fen=toFenStr;
+self.__chess={loadFen,perft,think,evaluate,hashCheck,legalMoves,make,unmake,sqName,getSide:()=>side,getHalf:()=>half};
+self.onmessage=function(e){
+  const d=e.data;
+  try{
+    const r=think(d.fen,d.hist,d.ms||2000,d.maxDepth||14);
+    self.postMessage({id:d.id,move:r});
+  }catch(err){self.postMessage({id:d.id,error:String(err&&err.message||err)});}
+};
+})();
+
+</script>
+<script id="w-checkers" type="text/plain">
+/* Shashka dvigateli (uchuvchi damka, majburiy urish, orqaga urish) - Web Worker ichida ishlaydi */
+(function(){
+'use strict';
+const DR=[-1,-1,1,1],DC=[-1,1,-1,1];
+const WIN=30000,MAXPLY=60;
+const B=new Int8Array(64);
+// Zobrist
+let seed=0x1BADB002|0;
+function rnd(){seed^=seed<<13;seed^=seed>>>17;seed^=seed<<5;return seed|0;}
+const Z1=new Int32Array(5*64),Z2=new Int32Array(5*64);
+for(let i=0;i<Z1.length;i++){Z1[i]=rnd();Z2[i]=rnd();}
+const ZS1=rnd(),ZS2=rnd();
+let hh1=0,hh2=0;
+function hashBoard(s){
+  let a=s===1?0:ZS1,b=s===1?0:ZS2;
+  for(let i=0;i<64;i++){const p=B[i];if(p){a^=Z1[(p+2)*64+i];b^=Z2[(p+2)*64+i];}}
+  hh1=a;hh2=b;
+}
+
+/* ---- qoidalar (o'yin qoidalari bilan bir xil) ---- */
+function hasCapKing(i,s){
+  const r=i>>3,c=i&7;
+  for(let d=0;d<4;d++){
+    const dr=DR[d],dc=DC[d];
+    let r1=r+dr,c1=c+dc;
+    while(r1>=0&&r1<8&&c1>=0&&c1<8&&B[r1*8+c1]===0){r1+=dr;c1+=dc;}
+    if(r1<0||r1>7||c1<0||c1>7)continue;
+    if(B[r1*8+c1]*s>=0)continue;
+    const r2=r1+dr,c2=c1+dc;
+    if(r2>=0&&r2<8&&c2>=0&&c2<8&&B[r2*8+c2]===0)return true;
+  }
+  return false;
+}
+function capsFrom(i){
+  const p=B[i],s=p>0?1:-1,king=(p===2||p===-2);
+  const r=i>>3,c=i&7,out=[];
+  for(let d=0;d<4;d++){
+    const dr=DR[d],dc=DC[d];
+    if(king){
+      let r1=r+dr,c1=c+dc;
+      while(r1>=0&&r1<8&&c1>=0&&c1<8&&B[r1*8+c1]===0){r1+=dr;c1+=dc;}
+      if(r1<0||r1>7||c1<0||c1>7)continue;
+      const j=r1*8+c1;
+      if(B[j]*s>=0)continue;
+      const lands=[];
+      let r2=r1+dr,c2=c1+dc;
+      while(r2>=0&&r2<8&&c2>=0&&c2<8&&B[r2*8+c2]===0){lands.push(r2*8+c2);r2+=dr;c2+=dc;}
+      if(!lands.length)continue;
+      if(lands.length>1){
+        const keep=[],jp=B[j];
+        B[i]=0;B[j]=0;
+        for(let k=0;k<lands.length;k++){const L=lands[k];B[L]=p;if(hasCapKing(L,s))keep.push(L);B[L]=0;}
+        B[i]=p;B[j]=jp;
+        const use=keep.length?keep:lands;
+        for(let k=0;k<use.length;k++)out.push(use[k],j);
+      }else out.push(lands[0],j);
+    }else{
+      const r2=r+2*dr,c2=c+2*dc;
+      if(r2<0||r2>7||c2<0||c2>7)continue;
+      const j=(r+dr)*8+(c+dc);
+      if(B[j]*s<0&&B[r2*8+c2]===0)out.push(r2*8+c2,j);
+    }
+  }
+  return out;
+}
+function chainGen(from,cur,seq,out){
+  const c=capsFrom(cur);
+  if(!c.length){if(seq.length)out.push({f:from,s:seq.slice()});return;}
+  for(let k=0;k<c.length;k+=2){
+    const to=c[k],j=c[k+1],pc=B[cur],victim=B[j];
+    B[cur]=0;B[j]=0;
+    let np=pc;const row=to>>3;
+    if(pc===1&&row===0)np=2;else if(pc===-1&&row===7)np=-2;
+    B[to]=np;seq.push(to,j);
+    chainGen(from,to,seq,out);
+    seq.length-=2;B[to]=0;B[j]=victim;B[cur]=pc;
+  }
+}
+function genTurns(s){
+  const out=[];
+  for(let i=0;i<64;i++){if(B[i]*s>0)chainGen(i,i,[],out);}
+  if(out.length)return out;
+  for(let i=0;i<64;i++){
+    const p=B[i];if(p*s<=0)continue;
+    const king=(p===2||p===-2),r=i>>3,c=i&7;
+    for(let d=0;d<4;d++){
+      const dr=DR[d],dc=DC[d];
+      if(!king&&dr!==(s===1?-1:1))continue;
+      let r1=r+dr,c1=c+dc;
+      while(r1>=0&&r1<8&&c1>=0&&c1<8&&B[r1*8+c1]===0){
+        out.push({f:i,s:[r1*8+c1,-1]});
+        if(!king)break;
+        r1+=dr;c1+=dc;
+      }
+    }
+  }
+  return out;
+}
+function apply(t){
+  const from=t.f,p=B[from];B[from]=0;
+  let cur=p;const rec=[],s=t.s;
+  for(let k=0;k<s.length;k+=2){
+    const to=s[k],j=s[k+1];
+    if(j>=0){rec.push(j,B[j]);B[j]=0;}
+    const row=to>>3;
+    if(cur===1&&row===0)cur=2;else if(cur===-1&&row===7)cur=-2;
+  }
+  const last=s[s.length-2];B[last]=cur;
+  return {from,p,last,rec};
+}
+function undo(u){
+  B[u.last]=0;
+  for(let k=0;k<u.rec.length;k+=2)B[u.rec[k]]=u.rec[k+1];
+  B[u.from]=u.p;
+}
+
+/* ---- baholash ---- */
+function evaluate(s){
+  let sc=0,wm=0,bm=0,wk=0,bk=0;
+  for(let i=0;i<64;i++){
+    const p=B[i];if(!p)continue;
+    const r=i>>3,c=i&7;
+    const center=(c>=2&&c<=5&&r>=2&&r<=5)?4:0;
+    if(p===1){wm++;sc+=100+(7-r)*6+center;if(r===7)sc+=8;if(c===0||c===7)sc-=2;if(r===1)sc+=10;}
+    else if(p===-1){bm++;sc-=100+r*6+center;if(r===0)sc-=8;if(c===0||c===7)sc+=2;if(r===6)sc-=10;}
+    else if(p===2){wk++;sc+=310+(r+c===7?14:0)+center;}
+    else{bk++;sc-=310+(r+c===7?14:0)+center;}
+  }
+  // harakatchanlik: har bir tomonning bo'sh katakka yura oladigan donalari
+  let mw=0,mb=0;
+  for(let i=0;i<64;i++){
+    const p=B[i];if(!p)continue;
+    const r=i>>3,c=i&7;
+    for(let d=0;d<4;d++){
+      const r1=r+DR[d],c1=c+DC[d];
+      if(r1<0||r1>7||c1<0||c1>7||B[r1*8+c1]!==0)continue;
+      if(p===1){if(DR[d]===-1)mw++;}else if(p===-1){if(DR[d]===1)mb++;}else if(p===2)mw+=2;else mb+=2;
+    }
+  }
+  sc+=2*(mw-mb);
+  // damkasi ko'p tomon tengsiz endshpilda: raqib damkasi bo'lmasa bosim
+  if(wk&&!bk&&!bm)sc+=wk*20;
+  if(bk&&!wk&&!wm)sc-=bk*20;
+  return s===1?sc:-sc;
+}
+
+/* ---- qidiruv ---- */
+const TTN=1<<18,TTM=TTN-1;
+const ttK1=new Int32Array(TTN),ttK2=new Int32Array(TTN),ttSig=new Int16Array(TTN),ttScore=new Int16Array(TTN),ttDepth=new Int8Array(TTN),ttFlag=new Int8Array(TTN);
+const hist=new Int32Array(64*64);
+let nodes=0,stopped=false,deadline=0,iterBest=-1;
+const sig=t=>t.f*64+t.s[t.s.length-2];
+
+function order(turns,ttsig){
+  for(let i=0;i<turns.length;i++){
+    const t=turns[i],sg=sig(t);
+    t.o=(sg===ttsig)?1e7:(t.s[1]>=0?1e6+t.s.length*100:hist[(t.f*64+t.s[t.s.length-2])&4095]);
+  }
+  turns.sort((a,b)=>b.o-a.o);
+}
+function negamax(depth,alpha,beta,ply,s,q){
+  if((nodes++&511)===0&&Date.now()>deadline)stopped=true;
+  if(stopped)return 0;
+  if(q>=30)return 0;                       // 15 yurish qoidasi: durang
+  const turns=genTurns(s);
+  if(!turns.length)return -WIN+ply;
+  const isCap=turns[0].s[1]>=0;
+  if(depth<=0&&(!isCap||ply>=MAXPLY))return evaluate(s);
+  hashBoard(s);
+  const k1=hh1,k2=hh2,idx=k1&TTM;
+  let ttsig=-1;
+  if(ttK1[idx]===k1&&ttK2[idx]===k2){
+    ttsig=ttSig[idx];
+    if(ply>0&&ttDepth[idx]>=depth&&depth>0){
+      let sc=ttScore[idx];
+      if(sc>WIN-200)sc-=ply;else if(sc<-WIN+200)sc+=ply;
+      const f=ttFlag[idx];
+      if(f===0)return sc;
+      if(f===1&&sc>=beta)return sc;
+      if(f===2&&sc<=alpha)return sc;
+    }
+  }
+  order(turns,ttsig);
+  const alpha0=alpha;let best=-WIN*2,bestSig=-1;
+  for(let i=0;i<turns.length;i++){
+    const t=turns[i];
+    const u=apply(t);
+    const nq=(t.s[1]>=0||Math.abs(u.p)===1)?0:q+1;
+    let sc;
+    if(i===0)sc=-negamax(depth-1,-beta,-alpha,ply+1,-s,nq);
+    else{
+      sc=-negamax(depth-1,-alpha-1,-alpha,ply+1,-s,nq);
+      if(sc>alpha&&sc<beta)sc=-negamax(depth-1,-beta,-alpha,ply+1,-s,nq);
+    }
+    undo(u);
+    if(stopped)return 0;
+    if(sc>best){best=sc;bestSig=sig(t);}
+    if(sc>alpha){
+      alpha=sc;
+      if(ply===0)iterBest=i;
+      if(alpha>=beta){
+        if(!isCap)hist[(t.f*64+t.s[t.s.length-2])&4095]+=depth*depth;
+        break;
+      }
+    }
+  }
+  let flag=0;
+  if(best<=alpha0)flag=2;else if(best>=beta)flag=1;
+  let ss=best;
+  if(ss>WIN-200)ss+=ply;else if(ss<-WIN+200)ss-=ply;
+  if(depth>0&&(ttDepth[idx]<=depth||ttK1[idx]!==k1)){
+    ttK1[idx]=k1;ttK2[idx]=k2;ttSig[idx]=bestSig;ttScore[idx]=ss;ttDepth[idx]=depth;ttFlag[idx]=flag;
+  }
+  return best;
+}
+
+function setBoard(arr){
+  for(let r=0;r<8;r++)for(let c=0;c<8;c++){
+    const v=arr[r][c];
+    B[r*8+c]=!v?0:v==='w'?1:v==='W'?2:v==='b'?-1:-2;
+  }
+}
+function toSteps(t){
+  const steps=[];let cur=t.f;
+  for(let k=0;k<t.s.length;k+=2){
+    const to=t.s[k],j=t.s[k+1];
+    const st={from:{r:cur>>3,c:cur&7},to:{r:to>>3,c:to&7}};
+    if(j>=0)st.to.jump={r:j>>3,c:j&7};
+    steps.push(st);cur=to;
+  }
+  return steps;
+}
+function think(board,sideCh,chain,quiet,ms,maxDepth){
+  setBoard(board);
+  const s=sideCh==='w'?1:-1;
+  let root;
+  if(chain){
+    root=[];chainGen(chain.r*8+chain.c,chain.r*8+chain.c,[],root);
+  }else root=genTurns(s);
+  if(!root.length)return null;
+  if(root.length===1)return {steps:toSteps(root[0]),depth:0,score:0};
+  // boshlang'ich holatda xilma-xillik
+  let cnt=0;for(let i=0;i<64;i++)if(B[i])cnt++;
+  if(cnt===24&&!chain){const t=root[Math.floor(Math.random()*root.length)];return {steps:toSteps(t),depth:0,score:0};}
+  const t0=Date.now();deadline=t0+ms;stopped=false;nodes=0;
+  for(let k=0;k<hist.length;k++)hist[k]>>=2;
+  let bestT=root[0],bestScore=0,done=0,prevSig=-1;
+  for(let d=1;d<=maxDepth;d++){
+    // ildiz yurishlarini oldingi eng yaxshisi birinchi bo'lishi uchun tartiblash
+    order(root,prevSig);
+    iterBest=-1;
+    let alpha=-WIN*2,beta=WIN*2,bi=-1,bs=-WIN*2;
+    let finished=true;
+    for(let i=0;i<root.length;i++){
+      const t=root[i],u=apply(t);
+      const nq=(t.s[1]>=0||Math.abs(u.p)===1)?0:quiet+1;
+      let sc;
+      if(i===0)sc=-negamax(d-1,-beta,-alpha,1,-s,nq);
+      else{
+        sc=-negamax(d-1,-alpha-1,-alpha,1,-s,nq);
+        if(sc>alpha&&sc<beta)sc=-negamax(d-1,-beta,-alpha,1,-s,nq);
+      }
+      undo(u);
+      if(stopped){finished=false;break;}
+      if(sc>bs){bs=sc;bi=i;}
+      if(sc>alpha)alpha=sc;
+    }
+    if(bi>=0&&(finished||bs>bestScore-50)){bestT=root[bi];bestScore=bs;prevSig=sig(bestT);}
+    if(!finished)break;
+    done=d;
+    if(Math.abs(bs)>WIN-100)break;
+    if(Date.now()-t0>ms*0.55)break;
+  }
+  return {steps:toSteps(bestT),depth:done,score:bestScore,nodes:nodes};
+}
+self.__ck={setBoard,genTurns,chainGen,think,toSteps,B};
+self.onmessage=function(e){
+  const d=e.data;
+  try{
+    const r=think(d.board,d.side,d.chain||null,d.quiet||0,d.ms||1500,d.maxDepth||18);
+    self.postMessage({id:d.id,move:r});
+  }catch(err){self.postMessage({id:d.id,error:String(err&&err.message||err)});}
+};
+})();
+
+</script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
@@ -263,6 +1081,28 @@ const FIREBASE_CONFIG={
   };
   window.fbUnqueue=function(game){
     return db.ref('queue/'+game).transaction(q=>(q&&q.uid===window.fbUid)?null:q);
+  };
+
+  // Onlayn o'ynayotganlar soni
+  let liveRef=null,liveConn=null;
+  window.fbLive=function(game,on){
+    if(liveConn){db.ref('.info/connected').off('value',liveConn);liveConn=null;}
+    if(liveRef){const r=liveRef;liveRef=null;r.onDisconnect().cancel();r.remove();}
+    if(!on)return;
+    liveRef=db.ref('live/'+game+'/'+window.fbUid);
+    liveConn=db.ref('.info/connected').on('value',s=>{if(s.val()===true&&liveRef){liveRef.onDisconnect().remove();liveRef.set(Date.now());}});
+  };
+  window.fbLiveListen=function(game,cb){db.ref('live/'+game).on('value',s=>cb(s.numChildren()),()=>{});};
+  // Raqib chiqib ketganini bilish uchun xona ichidagi ishtirok belgisi
+  let presRef=null,presConn=null;
+  window.fbPresence=function(room,color){
+    window.fbPresenceOff();
+    presRef=ref(room).child('pres/'+color);
+    presConn=db.ref('.info/connected').on('value',s=>{if(s.val()===true&&presRef){presRef.onDisconnect().set(false);presRef.set(true);}});
+  };
+  window.fbPresenceOff=function(){
+    if(presConn){db.ref('.info/connected').off('value',presConn);presConn=null;}
+    if(presRef){const r=presRef;presRef=null;r.onDisconnect().cancel();r.set(false);}
   };
 
   // Qisqa chat
@@ -388,6 +1228,7 @@ const hap=(t='light')=>{const h=tg&&tg.HapticFeedback;if(!h)return;t==='success'
 
 const GLYPH={p:'♟\uFE0E',r:'♜',n:'♞',b:'♝',q:'♛',k:'♚'};
 const VAL={p:1,n:3,b:3,r:5,q:9,k:0};
+const startT=g=>g==='chess'?600:300;   // shaxmat 10 daqiqa, shashka 5 daqiqa
 const opp=c=>c==='w'?'b':'w';
 const inb=(r,c)=>r>=0&&r<8&&c>=0&&c<8;
 const sq=(r,c)=>String.fromCharCode(97+c)+(8-r);
@@ -410,7 +1251,7 @@ $('game-cards').innerHTML=GAMES.map(([id,t,d,ic,hv,box])=>`
 <div class="glass-panel p-5 rounded-2xl ${hv} transition-all">
   <div class="flex items-center space-x-3">
     <div class="w-12 h-12 rounded-xl border flex items-center justify-center text-2xl ${box}"><i class="fa-solid ${ic}"></i></div>
-    <div><h3 class="font-bold text-lg">${t}</h3><p class="text-xs text-slate-400">${d}</p></div>
+    <div><h3 class="font-bold text-lg">${t}</h3><p class="text-xs text-slate-400">${d}</p><p id="live-${id}" class="text-[11px] text-emerald-400 mt-0.5">● onlayn o'ynayotganlar: …</p></div>
   </div>
   <div class="grid grid-cols-2 gap-2 mt-4">
     <button onclick="startMode('${id}','friend',{random:true})" class="${BTN} bg-gradient-to-br from-amber-500 to-amber-700"><i class="fa-solid fa-globe text-sm"></i> Onlayn (tasodifiy raqib)</button>
@@ -420,6 +1261,15 @@ $('game-cards').innerHTML=GAMES.map(([id,t,d,ic,hv,box])=>`
   </div>
 </div>`).join('');
 
+let liveStarted=false;
+function startLive(){
+  if(liveStarted||!window.fbLiveListen)return;
+  liveStarted=true;
+  ['chess','checkers'].forEach(g=>window.fbLiveListen(g,n=>{
+    const el=$('live-'+g);
+    if(el)el.innerText='● '+n+" o'yinchi onlayn o'ynayapti";
+  }));
+}
 /* ---------- Statistika va reyting (faqat onlayn o'yinlar) ---------- */
 const esc=t=>String(t==null?'':t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function myKey(){const u=tg&&tg.initDataUnsafe&&tg.initDataUnsafe.user;return u?'tg_'+u.id:(window.fbUid?'u_'+window.fbUid:null);}
@@ -465,6 +1315,7 @@ async function refreshStats(){
     await window.authReady;const k=myKey();if(!k||!window.fbEnsureUser)return;
     setStats(await window.fbEnsureUser(k,myName()));
     if(REF)maybeCredit(REF);
+    startLive();
   }catch(e){console.error(e);}
   finally{if(window._userReadyRes){window._userReadyRes();window._userReadyRes=null;}}
 }
@@ -614,6 +1465,9 @@ function leaveRoom(){
     const k=myKey(),rm=S.room;S.staked=false;
     window.fbRefund(rm,k).then(ok=>{if(ok)refreshStats();}).catch(()=>{});
   }
+  if(S&&S.dcTimer){clearTimeout(S.dcTimer);S.dcTimer=null;}
+  if(window.fbPresenceOff)window.fbPresenceOff();
+  if(window.fbLive)window.fbLive(null,false);
   if(S&&S.qTimer){clearInterval(S.qTimer);S.qTimer=null;}
   if(S&&S.random&&S.waiting&&window.fbUnqueue)window.fbUnqueue(S.game).catch(()=>{});
   clearInterval(timer);timer=null;clearTimeout(botTimer);
@@ -625,7 +1479,7 @@ window.startMode=async function(game,mode,opts){
   opts=opts||{};
   if(!window.subOk)return;
   hap('medium');leaveRoom();
-  const me=S={game,mode,random:!!opts.random,my:'w',room:null,waiting:false,sel:null,moves:[],last:null,over:false,t:{w:300,b:300},chess:null,B:null,turn:'w',chain:null};
+  const me=S={game,mode,random:!!opts.random,my:'w',room:null,waiting:false,sel:null,moves:[],last:null,over:false,t:{w:startT(game),b:startT(game)},chess:null,B:null,turn:'w',chain:null,quiet:0,qflag:false};
   document.querySelectorAll('.nav-screen').forEach(e=>e.classList.add('hidden'));
   $('screen-game').classList.remove('hidden');
   $('share-room-btn').classList.toggle('hidden',mode!=='friend'||!!opts.random);
@@ -666,6 +1520,7 @@ window.startMode=async function(game,mode,opts){
       if(S!==me)return;
       if(st==='poor'){showModal('Tanga yetarli emas',"Tikish uchun 5 🪙 yetmadi.");backToLobby();return;}
       me.staked=true;refreshStats();
+      if(window.fbPresence)window.fbPresence(me.room,me.my);
       window.fbListen(me.room,d=>onRoom(me,d));
       window.fbChatListen(me.room,m=>{if(S===me)addChat(m);});
     }catch(e){console.error(e);showModal('Xato',"Xona bilan ishlashda xatolik yuz berdi.");return;}
@@ -695,7 +1550,7 @@ window.resetGame=function(){
   if(!S)return;
   if(S.mode==='friend'){backToLobby();return;}
   hap('medium');clearTimeout(botTimer);
-  S.over=false;S.sel=null;S.moves=[];S.last=null;S.chain=null;S.turn='w';S.t={w:300,b:300};
+  S.over=false;S.sel=null;S.moves=[];S.last=null;S.chain=null;S.turn='w';S.t={w:startT(S.game),b:startT(S.game)};S.quiet=0;S.qflag=false;
   initEngine();
   if(S.mode==='friend'&&S.room)window.fbPush(S.room,stateString(),'w',null);
   render();
@@ -704,13 +1559,13 @@ window.resetGame=function(){
 function initEngine(){
   if(S.game==='chess'){S.chess=new Chess();S.B=null;}
   else{
-    S.chess=null;S.chain=null;
+    S.chess=null;S.chain=null;S.quiet=0;S.qflag=false;
     S.B=Array.from({length:8},()=>Array(8).fill(null));
     for(let r=0;r<8;r++)for(let c=0;c<8;c++)if((r+c)%2===1){if(r<3)S.B[r][c]='b';else if(r>4)S.B[r][c]='w';}
   }
   S.turn='w';
 }
-const stateString=()=>S.game==='chess'?S.chess.fen():JSON.stringify({b:S.B,c:S.chain});
+const stateString=()=>S.game==='chess'?S.chess.fen():JSON.stringify({b:S.B,c:S.chain,q:S.quiet||0});
 
 /* ---------- Taymer ---------- */
 function startTimer(){
@@ -782,11 +1637,22 @@ function checkOver(){
     if(g.in_checkmate())finish(opp(g.turn()),'Shah va mat! ');
     else if(g.game_over())finish(null,'');
   }else if(!ckHasMove())finish(opp(S.turn),"Yurish qolmadi. ");
+  else if((S.quiet||0)>=30)finish(null,"15 yurish davomida urish ham, oddiy dona yurishi ham bo'lmadi. ");
 }
 
+function oppLeft(me){
+  me.dcTimer=null;
+  if(S!==me||me.over)return;
+  const k=me.oppKey,nm=me.oppName,room=me.room;
+  if(window.fbResign)window.fbResign(room,opp(me.my)).catch(()=>{});
+  finish(me.my,"Raqib o'yindan chiqib ketdi. ");
+  if(k&&window.fbRecord)window.fbRecord(room,k,nm||'Raqib','loss').catch(()=>{});
+}
 function finish(winner,why){
   if(S.over)return;
   S.over=true;hap('success');
+  if(S.dcTimer){clearTimeout(S.dcTimer);S.dcTimer=null;}
+  if(S.liveOn&&window.fbLive){S.liveOn=false;window.fbLive(null,false);}
   let m;
   if(!winner)m='Durang!';
   else if(S.mode==='pass')m=(winner==='w'?'Oq':'Qora')+" g'alaba qildi!";
@@ -883,13 +1749,14 @@ function ckMove(from,to){
   let promoted=false;
   if(p==='w'&&to.r===0){S.B[to.r][to.c]='W';promoted=true;}
   if(p==='b'&&to.r===7){S.B[to.r][to.c]='B';promoted=true;}
+  if(to.jump||p===p.toLowerCase())S.qflag=true;     // urish yoki oddiy dona yurishi
   S.chain=null;
   if(to.jump&&ckSteps(to.r,to.c,true).length)S.chain={r:to.r,c:to.c};  // ketma-ket urish
-  else S.turn=opp(S.turn);
+  else{S.turn=opp(S.turn);S.quiet=S.qflag?0:(S.quiet||0)+1;S.qflag=false;}
 }
 
 /* ---------- Bot ---------- */
-function botMove(){
+function botSimple(){
   if(!S||S.over||S.turn===S.my)return;
   if(S.game==='chess'){
     const g=S.chess,ms=g.moves({verbose:true});
@@ -919,21 +1786,101 @@ function botMove(){
   afterMove(false);
 }
 
+/* ---------- Kuchli bot (Web Worker ichida) ---------- */
+const workers={},syncInst={};let reqId=0;
+const engineSrc=id=>document.getElementById(id).textContent;
+function runEngine(kind,payload,timeout){
+  return new Promise((resolve,reject)=>{
+    const id=++reqId;payload.id=id;
+    const srcId=kind==='chess'?'w-chess':'w-checkers';
+    let w=workers[kind];
+    if(w===undefined){
+      try{w=workers[kind]=new Worker(URL.createObjectURL(new Blob([engineSrc(srcId)],{type:'text/javascript'})));}
+      catch(e){w=workers[kind]=null;}
+    }
+    if(w){
+      let to=null;
+      const cleanup=()=>{clearTimeout(to);w.removeEventListener('message',onm);w.removeEventListener('error',onerr);};
+      const onm=e=>{if(e.data.id!==id)return;cleanup();e.data.error?reject(new Error(e.data.error)):resolve(e.data.move);};
+      const onerr=()=>{cleanup();workers[kind]=undefined;reject(new Error('worker'));};
+      to=setTimeout(()=>{cleanup();workers[kind]=undefined;try{w.terminate();}catch(e){}reject(new Error('timeout'));},timeout||9000);
+      w.addEventListener('message',onm);w.addEventListener('error',onerr);
+      w.postMessage(payload);
+    }else{ // Worker ishlamasa, asosiy oqimda hisoblaymiz
+      setTimeout(()=>{
+        try{
+          const inst=syncInst[kind]||(syncInst[kind]=(()=>{const f={postMessage(){}};new Function('self',engineSrc(srcId))(f);return f;})());
+          let out;inst.postMessage=m=>{out=m;};inst.onmessage({data:payload});
+          if(out&&!out.error)resolve(out.move);else reject(new Error(out&&out.error||'engine'));
+        }catch(e){reject(e);}
+      },30);
+    }
+  });
+}
+function botMove(){
+  if(!S||S.over||S.turn===S.my||S.botBusy)return;
+  const me=S;
+  if(S.game==='chess'){
+    me.botBusy=true;
+    let hist=[];
+    try{const t=new Chess();for(const san of S.chess.history()){hist.push(t.fen());t.move(san);}}catch(e){hist=[];}
+    runEngine('chess',{fen:S.chess.fen(),hist:hist,ms:2200,maxDepth:14},9000).then(r=>{
+      me.botBusy=false;
+      if(S!==me||S.over)return;
+      if(!r)return botSimple();
+      const g=S.chess,m=g.move({from:r.from,to:r.to,promotion:r.promo||'q'});
+      if(!m)return botSimple();
+      S.turn=g.turn();
+      const a=rc(r.from),b=rc(r.to);S.last={fr:a.r,fc:a.c,tr:b.r,tc:b.c};
+      hap('medium');afterMove(false);
+    }).catch(()=>{me.botBusy=false;if(S===me&&!S.over)botSimple();});
+  }else botCheckers();
+}
+function botStep(st){
+  const m=ckLegal(st.from.r,st.from.c).find(x=>x.r===st.to.r&&x.c===st.to.c);
+  if(!m)return false;
+  ckMove(st.from,m);
+  S.last={fr:st.from.r,fc:st.from.c,tr:m.r,tc:m.c};
+  hap('medium');afterMove(false);
+  return true;
+}
+function botCheckers(){
+  const me=S;
+  if(me.botPlan&&me.botPlan.length){
+    if(botStep(me.botPlan.shift()))return;
+    me.botPlan=null;
+  }
+  me.botBusy=true;
+  runEngine('checkers',{board:S.B,side:S.turn,chain:S.chain,quiet:S.quiet||0,ms:1500,maxDepth:18},9000).then(r=>{
+    me.botBusy=false;
+    if(S!==me||S.over)return;
+    if(!r||!r.steps||!r.steps.length)return botSimple();
+    me.botPlan=r.steps.slice();
+    if(!botStep(me.botPlan.shift())){me.botPlan=null;botSimple();}
+  }).catch(()=>{me.botBusy=false;if(S===me&&!S.over)botSimple();});
+}
+
 /* ---------- Onlayn sinxronlash ---------- */
 function onRoom(me,d){
   if(S!==me)return;
-  if(d.gameType!==S.game){S.game=d.gameType;initEngine();}
+  if(d.gameType!==S.game){S.game=d.gameType;initEngine();S.t={w:startT(S.game),b:startT(S.game)};}
   S.my=d.playerWhite===window.fbUid?'w':'b';
   S.waiting=d.status==='waiting';
   if(!S.waiting&&S.qTimer){clearInterval(S.qTimer);S.qTimer=null;}
   oppFromRoom(d);
+  if(!S.waiting&&!S.over){
+    if(!S.liveOn&&window.fbLive){S.liveOn=true;window.fbLive(S.game,true);}
+    const oc=opp(S.my),op=d.pres?d.pres[oc]:undefined;
+    if(op===false){if(!S.dcTimer)S.dcTimer=setTimeout(()=>oppLeft(me),12000);}
+    else if(S.dcTimer){clearTimeout(S.dcTimer);S.dcTimer=null;}
+  }
   if(d.resigned&&!S.over){finish(d.resigned==='w'?'b':'w',"Raqib taslim bo'ldi. ");return;}
   const sig=[d.gameState,d.turn,d.status,JSON.stringify(d.lastMove||null),d.resigned||'',d.playerBlack||''].join('|');
   if(S.sig===sig)return;
   S.sig=sig;
   try{
     if(S.game==='chess'){if(d.gameState!==S.chess.fen())S.chess.load(d.gameState);S.turn=S.chess.turn();}
-    else{const o=JSON.parse(d.gameState);S.B=o.b;S.chain=o.c;S.turn=d.turn;}
+    else{const o=JSON.parse(d.gameState);S.B=o.b;S.chain=o.c;S.quiet=o.q||0;S.turn=d.turn;}
   }catch(e){console.error('Holatni yuklashda xato',e);return;}
   const lm=d.lastMove;S.last=lm&&typeof lm.fr==='number'?lm:null;
   S.sel=null;S.moves=[];
